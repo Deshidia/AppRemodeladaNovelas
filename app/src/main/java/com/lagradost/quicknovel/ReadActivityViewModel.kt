@@ -1457,12 +1457,20 @@ class ReadActivityViewModel : ViewModel() {
         val ttsSession = ttsSession ?: return
         if (!ttsSession.ttsInitialized()) return
         pendingTTSSkip += 1
+        // if we were paused, pressing forward should also resume playback
+        if (currentTTSStatus == TTSHelper.TTSStatus.IsPaused) {
+            currentTTSStatus = TTSHelper.TTSStatus.IsRunning
+        }
     }
 
     fun backwardsTTS() {
         val ttsSession = ttsSession ?: return
         if (!ttsSession.ttsInitialized()) return
         pendingTTSSkip -= 1
+        // if we were paused, pressing backwards should also resume playback
+        if (currentTTSStatus == TTSHelper.TTSStatus.IsPaused) {
+            currentTTSStatus = TTSHelper.TTSStatus.IsRunning
+        }
     }
 
     fun playTTS() {
@@ -1653,10 +1661,10 @@ class ReadActivityViewModel : ViewModel() {
                         // do not count in tts sleep
                         ttsEndTime += 100L * isPauseDuration
 
-                        // if we pause then we resume on the same line
-                        if (isPauseDuration > 0) {
+                        // if we pause then we resume on the same line, unless a forward/backward
+                        // was pressed while paused, in which case honor that skip below
+                        if (isPauseDuration > 0 && pendingTTSSkip == 0) {
                             notify()
-                            pendingTTSSkip = 0
                             continue
                         }
 
