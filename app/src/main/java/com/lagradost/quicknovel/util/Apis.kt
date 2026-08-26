@@ -1,0 +1,278 @@
+package com.lagradost.quicknovel.util
+
+import android.content.Context
+import android.util.Log
+import androidx.preference.PreferenceManager
+import com.lagradost.quicknovel.APIRepository
+import com.lagradost.quicknovel.CommonActivity.activity
+import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.SearchResponse
+import com.lagradost.quicknovel.StreamResponse
+import com.lagradost.quicknovel.providers.AllNovelProvider
+import com.lagradost.quicknovel.providers.AnnasArchive
+import com.lagradost.quicknovel.providers.DevilNovelsProvider
+import com.lagradost.quicknovel.providers.ChrysanthemumGardenProvider
+import com.lagradost.quicknovel.providers.FanMtlnProvider
+import com.lagradost.quicknovel.providers.FenrirRealProvider
+import com.lagradost.quicknovel.providers.FreewebnovelProvider
+import com.lagradost.quicknovel.providers.FuckNovelpiaProvider
+import com.lagradost.quicknovel.providers.GraycityProvider
+import com.lagradost.quicknovel.providers.HiraethTranslationProvider
+import com.lagradost.quicknovel.providers.IndoWebNovelProvider
+import com.lagradost.quicknovel.providers.LnoriProvider
+import com.lagradost.quicknovel.providers.KolNovelProvider
+import com.lagradost.quicknovel.providers.LibReadProvider
+import com.lagradost.quicknovel.providers.LightNovelTranslationsProvider
+import com.lagradost.quicknovel.providers.LightNovelWorldProvider
+import com.lagradost.quicknovel.providers.LnMTLProvider
+import com.lagradost.quicknovel.providers.MeioNovelProvider
+import com.lagradost.quicknovel.providers.MoreNovelProvider
+import com.lagradost.quicknovel.providers.MtlNovelProvider
+import com.lagradost.quicknovel.providers.NoBadNovelProvider
+import com.lagradost.quicknovel.providers.NovLoveProvider
+import com.lagradost.quicknovel.providers.NovelBinProvider
+import com.lagradost.quicknovel.providers.NovelBuddyProvider
+import com.lagradost.quicknovel.providers.NovelFireProvider
+import com.lagradost.quicknovel.providers.NovelFullNETProvider
+import com.lagradost.quicknovel.providers.NovelFullProvider
+import com.lagradost.quicknovel.providers.NovelLightProvider
+import com.lagradost.quicknovel.providers.NovelManiaProvider
+import com.lagradost.quicknovel.providers.NovelasLigerasProvider
+import com.lagradost.quicknovel.providers.NovelsOnlineProvider
+import com.lagradost.quicknovel.providers.PawReadProver
+import com.lagradost.quicknovel.providers.PlanetaEpubProvider
+import com.lagradost.quicknovel.providers.RanobesProvider
+import com.lagradost.quicknovel.providers.ReadNovelFullProvider
+import com.lagradost.quicknovel.providers.ReadOnlineFreeBookProvider
+import com.lagradost.quicknovel.providers.ReadfromnetProvider
+import com.lagradost.quicknovel.providers.ReadhiveProvider
+import com.lagradost.quicknovel.providers.RedditProvider
+import com.lagradost.quicknovel.providers.RewayatProvider
+import com.lagradost.quicknovel.providers.RoyalRoadProvider
+import com.lagradost.quicknovel.providers.SakuraNovelProvider
+import com.lagradost.quicknovel.providers.ScribblehubProvider
+import com.lagradost.quicknovel.providers.SkyNovelsProvider
+import com.lagradost.quicknovel.providers.SonicMTLProvider
+import com.lagradost.quicknovel.providers.VynovelProvider
+import com.lagradost.quicknovel.providers.WattpadProvider
+import com.lagradost.quicknovel.providers.WtrLabProvider
+import com.lagradost.quicknovel.providers.WuxiaBoxProvider
+import com.lagradost.quicknovel.providers.WuxiaClickProvider
+import com.lagradost.quicknovel.util.Coroutines.ioSafe
+
+class Apis {
+    companion object {
+        val apis: List<MainAPI> = arrayOf(
+            //AllProvider(),
+            AllNovelProvider(),
+            AnnasArchive(),
+            //AzynovelProvider(), // dont exist anymore
+            //BestLightNovelProvider(), //dont exist anymore
+            ChrysanthemumGardenProvider(),
+            //ComrademaoProvider(), // domain sold/down?
+            DevilNovelsProvider(),
+            //EfremnetProvider(), // domain is expired
+            //EngNovelProvider(),
+            FanMtlnProvider(),
+            FenrirRealProvider(),
+            FreewebnovelProvider(),
+            FuckNovelpiaProvider(),
+            GraycityProvider(),
+            HiraethTranslationProvider(),
+            IndoWebNovelProvider(),
+            KolNovelProvider(),
+            LibReadProvider(),
+            //LightNovelPubProvider(), // Got cloudflare, but probably bypassable
+            LightNovelTranslationsProvider(),
+            LightNovelWorldProvider(),
+            LnoriProvider(),
+            LnMTLProvider(),
+            MeioNovelProvider(),
+            //MNovelFreeProvider(), // same as NovelFullVipProvider
+            MoreNovelProvider(),
+            MtlNovelProvider(),
+            NoBadNovelProvider(),
+            NovelasLigerasProvider(),
+            NovelBinProvider(),
+            NovelBuddyProvider(),
+            NovelFireProvider(),
+            NovelFullNETProvider(),
+            NovelFullProvider(),
+            NovelLightProvider(),
+            NovelManiaProvider(),
+            //NovelPassionProvider(), // Site gone
+            NovelsOnlineProvider(),
+            NovLoveProvider(),
+            PawReadProver(),
+            PlanetaEpubProvider(),
+            RanobesProvider(),
+            //RanobesProvider(),
+            //ReadAnyBookProvider(), // Books locked behind login
+            ReadfromnetProvider(),
+            ReadhiveProvider(),
+            //ReadLightNovelProvider(), // NOT WORKING?
+            ReadNovelFullProvider(),
+            ReadOnlineFreeBookProvider(),
+            RewayatProvider(),
+            RoyalRoadProvider(),
+            SakuraNovelProvider(), // cloudflare?
+            ScribblehubProvider(),
+            SkyNovelsProvider(),
+            SonicMTLProvider(),
+            VynovelProvider(),
+            WattpadProvider(),
+            WtrLabProvider(),
+            WuxiaBoxProvider(),
+            WuxiaClickProvider(),
+            //WuxiaWorldOnlineProvider(), // Site does not work
+            //WuxiaWorldSiteProvider(),
+        ).sortedBy { it.name }
+
+        fun getApiFromName(name: String): APIRepository {
+            return getApiFromNameOrNull(name) ?: APIRepository(apis[1])
+        }
+
+        fun getApiFromNameNull(apiName: String?): MainAPI? {
+            for (api in apis) {
+                if (apiName == api.name)
+                    return api
+            }
+            return null
+        }
+
+        fun getApiFromNameOrNull(name: String): APIRepository? {
+            for (a in apis) {
+                if (a.name == name) {
+                    return APIRepository(a)
+                }
+            }
+            if (name == RedditProvider().name) return APIRepository(RedditProvider())
+            return null
+        }
+
+        fun printProviders() {
+            /*
+            var str = ""
+            for (api in apis) {
+                str += "- ${api.mainUrl}\n"
+            }
+            println(str)
+
+            var str2 = ""
+            for (api in apis) {
+                val url = api.mainUrl.toUri()
+                str2 += "                <data\n" +
+                        "                        android:scheme=\"${url.scheme}\"\n" +
+                        "                        android:host=\"${url.host}\"\n" +
+                        "                        android:pathPrefix=\"/\" />"
+            }
+            println(str2)
+
+            testProviders()*/
+        }
+
+        fun testProviders() = ioSafe {
+            val TAG = "APITEST"
+            apis.amap { api ->
+                try {
+                    var result: List<SearchResponse>? = null
+                    for (x in arrayOf("my", "hello", "over", "guy")) {
+                        result = api.search(x)
+                        if (!result.isNullOrEmpty()) {
+                            break
+                        }
+                    }
+
+                    assert(!result.isNullOrEmpty()) {
+                        "Invalid search response from ${api.name}"
+                    }
+
+                    val loadResult = api.load(result!![0].url)
+                    assert(loadResult != null) {
+                        "Invalid load response from ${api.name}"
+                    }
+                    if (loadResult is StreamResponse) {
+                        assert(loadResult.data.isNotEmpty()) {
+                            "Invalid StreamResponse (no chapters) from ${api.name}"
+                        }
+                        val html = api.loadHtml(loadResult.data[0].url)
+                        assert(html != null) {
+                            "Invalid html (null) from ${api.name}"
+                        }
+                    }
+
+                    if (api.hasMainPage) {
+                        val response = api.loadMainPage(
+                            1,
+                            api.mainCategories.firstOrNull()?.second,
+                            api.orderBys.firstOrNull()?.second,
+                            api.tags.firstOrNull()?.second
+                        )
+                        assert(response.list.isNotEmpty()) {
+                            "Invalid (empty) loadMainPage list from ${api.name}"
+                        }
+                    }
+
+                    Log.v(TAG, "Valid response from ${api.name}")
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Invalid response from ${api.name}, got $t")
+                }
+            }
+        }
+
+        fun Context.getApiSettings(): HashSet<String> {
+            val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
+
+            // Por defecto todos los proveedores están activos si no hay configuración guardada
+            val allApiNames = apis.map { it.name }.toHashSet()
+
+            val selectedProviders = settingsManager.getStringSet(
+                this.getString(R.string.search_providers_list_key),
+                null // Usamos null para saber si el usuario ha tocado la configuración
+            )?.toHashSet() ?: allApiNames
+
+            val activeLangs = getApiProviderLangSettings()
+            val filteredList = HashSet<String>()
+            
+            for (name in selectedProviders) {
+                val api = getApiFromNameNull(name) ?: continue
+                if (activeLangs.contains(api.lang)) {
+                    filteredList.add(name)
+                }
+            }
+
+            // Solo devolvemos la lista completa si el usuario NO ha seleccionado nada 
+            // Y la lista filtrada está vacía (posible primera ejecución).
+            // Si el usuario desmarcó todo intencionadamente (selectedProviders vacío), se respeta.
+            if (filteredList.isEmpty() && selectedProviders.isNotEmpty()) {
+                // Si hay proveedores seleccionados pero ninguno coincide con el idioma, 
+                // devolvemos vacío para que el usuario sepa que debe activar el idioma.
+                return hashSetOf() 
+            }
+            
+            return if (filteredList.isEmpty() && !settingsManager.contains(this.getString(R.string.search_providers_list_key))) {
+                allApiNames // Failsafe para la primera vez
+            } else {
+                filteredList
+            }
+        }
+
+        fun getApiProviderLangSettings(): HashSet<String> {
+            return activity?.getApiProviderLangSettings() ?: hashSetOf()
+        }
+
+        fun Context.getApiProviderLangSettings(): HashSet<String> {
+            val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
+            val hashSet = HashSet<String>()
+            hashSet.add("en") // def is only en
+            val list = settingsManager.getStringSet(
+                this.getString(R.string.provider_lang_key),
+                hashSet.toMutableSet()
+            )
+
+            if (list.isNullOrEmpty()) return hashSet
+            return list.toHashSet()
+        }
+    }
+}
