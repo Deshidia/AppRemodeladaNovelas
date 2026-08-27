@@ -66,6 +66,11 @@
                 app:useSimpleSummaryProvider="true"
                 android:entries="@array/DownloadGridFormat"
                 android:entryValues="@array/DownloadGridFormatData" />
+        <Preference
+                app:icon="@drawable/ic_baseline_edit_24"
+                android:key="@string/library_lists_key"
+                android:title="@string/library_lists_settings"
+                android:summary="@string/library_lists_settings_desc" />
         <SwitchPreference
                 app:key="@string/auto_update_key"
                 android:title="@string/show_app_updates"

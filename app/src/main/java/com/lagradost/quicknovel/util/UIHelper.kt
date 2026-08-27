@@ -572,6 +572,59 @@ object UIHelper {
         return popup
     }
 
+    /**
+     * Same as [popupMenu] but takes literal item titles instead of string
+     * resources, for menus built from user-editable data (eg custom library
+     * lists) rather than fixed @StringRes entries.
+     *
+     * @param items menu item names to inflate the menu with. List of itemId to title pairs.
+     * @param selectedItemId optionally show a checkmark beside an item with this itemId.
+     * @param onMenuItemClick function to execute when a menu item is clicked.
+     */
+    @SuppressLint("RestrictedApi")
+    inline fun View.popupMenuNamed(
+        items: List<Pair<Int, String>>,
+        selectedItemId: Int? = null,
+        noinline onMenuItemClick: MenuItem.() -> Unit,
+    ): PopupMenu {
+        val ctw = ContextThemeWrapper(context, R.style.PopupMenu)
+        val popup = PopupMenu(
+            ctw,
+            this,
+            Gravity.NO_GRAVITY,
+            androidx.appcompat.R.attr.actionOverflowMenuStyle,
+            0
+        )
+
+        items.forEach { (id, title) ->
+            popup.menu.add(0, id, 0, title)
+        }
+
+        if (selectedItemId != null) {
+            (popup.menu as? MenuBuilder)?.setOptionalIconsVisible(true)
+
+            val emptyIcon = ContextCompat.getDrawable(context, R.drawable.ic_blank_24)
+            popup.menu.forEach { item ->
+                item.icon = when (item.itemId) {
+                    selectedItemId -> ContextCompat.getDrawable(context, R.drawable.ic_check_24)
+                        ?.mutate()?.apply {
+                            setTint(context.getResourceColor(android.R.attr.textColorPrimary))
+                        }
+
+                    else -> emptyIcon
+                }
+            }
+        }
+
+        popup.setOnMenuItemClickListener {
+            it.onMenuItemClick()
+            true
+        }
+
+        popup.show()
+        return popup
+    }
+
     @SuppressLint("RestrictedApi")
     inline fun View.popupMenu(
         items: List<Triple<Int, Int, Int>>,

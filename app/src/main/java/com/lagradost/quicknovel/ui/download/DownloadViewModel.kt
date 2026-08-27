@@ -45,7 +45,8 @@ import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.launchSafe
 import com.lagradost.quicknovel.mvvm.logError
-import com.lagradost.quicknovel.ui.ReadType
+import com.lagradost.quicknovel.ui.LibraryList
+import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.util.Apis.Companion.getApiFromNameOrNull
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ResultCached
@@ -114,13 +115,11 @@ class DownloadViewModel : ViewModel() {
         )
     }
 
-    val readList = arrayListOf(
-        ReadType.READING,
-        ReadType.ON_HOLD,
-        ReadType.PLAN_TO_READ,
-        ReadType.COMPLETED,
-        ReadType.DROPPED,
-    )
+    /** The user-editable library lists (Settings > Library lists), in tab order.
+     * Refreshed every time [loadAllData] runs so edits made in Settings are
+     * picked up as soon as the library screen is (re)loaded. */
+    var readList: List<LibraryList> = LibraryListManager.getLists()
+        private set
 
     var activeQuery: String = ""
     val _pages: MutableLiveData<List<Page>> = MutableLiveData(null)
@@ -222,7 +221,16 @@ class DownloadViewModel : ViewModel() {
     }
 
     fun refreshReadingProgress(){
-        DownloadFileWorkManager.refreshAllReadingProgress(this@DownloadViewModel, context ?: return, currentTab.value ?: 1)
+        val tab = currentTab.value ?: 1
+        // tab 0 is the "Downloads" page, which has no associated library list.
+        val listId = if (tab <= 0) 0 else readList.getOrNull(tab - 1)?.id ?: 0
+        DownloadFileWorkManager.refreshAllReadingProgress(this@DownloadViewModel, context ?: return, tab, listId)
+    }
+
+    /** Reloads [readList] from disk. Call after the user edits the library
+     * lists in Settings so the tabs reflect the change. */
+    fun reloadLibraryLists() {
+        readList = LibraryListManager.getLists()
     }
 
     fun showMetadata(card: DownloadFragment.DownloadDataLoaded) {
@@ -452,49 +460,50 @@ class DownloadViewModel : ViewModel() {
         _pages.postValue(list)
     }
 
-    fun loadAllData(refreshAll: Boolean) = viewModelScope.launch {
-        if (refreshAll) fetchAllData(false)
-        val mapping: HashMap<Int, ArrayList<ResultCached>> = hashMapOf(
-            ReadType.PLAN_TO_READ.prefValue to arrayListOf(),
-            ReadType.DROPPED.prefValue to arrayListOf(),
-            ReadType.COMPLETED.prefValue to arrayListOf(),
-            ReadType.ON_HOLD.prefValue to arrayListOf(),
-            ReadType.READING.prefValue to arrayListOf(),
-        )
-
-        withContext(Dispatchers.IO) {
-            val keys = getKeys(RESULT_BOOKMARK_STATE)
-            for (key in keys ?: emptyList()) {
-                val type = getKey<Int>(key) ?: continue
-                val id = key.replaceFirst(
-                    RESULT_BOOKMARK_STATE,
-                    RESULT_BOOKMARK
-                )
-                val cached = getKey<ResultCached>(id) ?: continue
-                mapping[type]?.add(cached)
+    fun loadAllData(refreshAll: Boolean): Job {
+        // Refresh synchronously so the tab titles (built right after this call
+        // returns) already reflect any edits made in Settings.
+        readList = LibraryListManager.getLists()
+        return viewModelScope.launch {
+            if (refreshAll) fetchAllData(false)
+            val mapping: HashMap<Int, ArrayList<ResultCached>> = hashMapOf()
+            for (read in readList) {
+                mapping[read.id] = arrayListOf()
             }
-        }
 
-        val pages = mutableListOf(
-            getDownloadedCards(),
-        )
-        for (read in readList) {
-            pages.add(
-                Page(
-                    read.name,
-                    unsortedItems = mapping[read.prefValue]!!,
-                    items = sortNormalArray(mapping[read.prefValue]!!)
-                ),
+            withContext(Dispatchers.IO) {
+                val keys = getKeys(RESULT_BOOKMARK_STATE)
+                for (key in keys ?: emptyList()) {
+                    val type = getKey<Int>(key) ?: continue
+                    val id = key.replaceFirst(
+                        RESULT_BOOKMARK_STATE,
+                        RESULT_BOOKMARK
+                    )
+                    val cached = getKey<ResultCached>(id) ?: continue
+                    mapping[type]?.add(cached)
+                }
+            }
+
+            val pages = mutableListOf(
+                getDownloadedCards(),
             )
+            for (read in readList) {
+                val items = mapping[read.id] ?: arrayListOf()
+                pages.add(
+                    Page(
+                        read.name,
+                        unsortedItems = items,
+                        items = sortNormalArray(items)
+                    ),
+                )
+            }
+            _pages.postValue(pages)
         }
-        _pages.postValue(pages)
-
-
     }
 
     private suspend fun getDownloadedCards(): Page = cardsDataMutex.withLock {
         Page(
-            ReadType.NONE.name, unsortedItems = ArrayList(cardsData.values),
+            "downloaded", unsortedItems = ArrayList(cardsData.values),
             items =
                 sortArray(ArrayList(cardsData.values))
         )

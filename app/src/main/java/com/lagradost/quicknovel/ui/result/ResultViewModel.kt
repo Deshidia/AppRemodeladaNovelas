@@ -195,7 +195,9 @@ class ResultViewModel : ViewModel() {
     var isGetLoaded = false
 
     var id: MutableLiveData<Int> = MutableLiveData<Int>(-1)
-    var readState: MutableLiveData<ReadType> = MutableLiveData<ReadType>(ReadType.NONE)
+    /** The id of the library list this novel currently belongs to, or
+     * [ReadType.NONE].prefValue (0) if it isn't in any list. */
+    var readState: MutableLiveData<Int> = MutableLiveData<Int>(ReadType.NONE.prefValue)
 
     var apiName : String = ""
 
@@ -567,7 +569,7 @@ class ResultViewModel : ViewModel() {
             updateBookmarkData()
         }
 
-        readState.postValue(ReadType.fromSpinner(state))
+        readState.postValue(state)
     }
 
     fun share() = viewModelScope.launch {
@@ -708,11 +710,7 @@ class ResultViewModel : ViewModel() {
         loadId = tid
 
         readState.postValue(
-            ReadType.fromSpinner(
-                getKey(
-                    RESULT_BOOKMARK_STATE, tid.toString()
-                )
-            )
+            getKey<Int>(RESULT_BOOKMARK_STATE, tid.toString()) ?: ReadType.NONE.prefValue
         )
 
         setKey(

@@ -130,6 +130,30 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
 
     lateinit var searchExitIcon: ImageView
     lateinit var searchMagIcon: ImageView
+    private var tabLayoutMediator: TabLayoutMediator? = null
+
+    override fun onResume() {
+        super.onResume()
+        // Picks up any list added/renamed/removed/reordered in Settings while
+        // this fragment was in the background.
+        val previousIds = viewModel.readList.map { it.id to it.name }
+        viewModel.reloadLibraryLists()
+        val binding = binding ?: return
+        if (previousIds != viewModel.readList.map { it.id to it.name }) {
+            binding.bookmarkTabs.apply {
+                val tabs = mutableListOf(getString(R.string.tab_downloads))
+                for (read in viewModel.readList) {
+                    tabs.add(read.name)
+                }
+                tabLayoutMediator?.detach()
+                removeAllTabs()
+                tabLayoutMediator = TabLayoutMediator(this, binding.viewpager) { tab, position ->
+                    tab.text = tabs.getOrNull(position) ?: ""
+                }.also { it.attach() }
+            }
+            viewModel.loadAllData(false)
+        }
+    }
 
     override fun onBindingCreated(binding: FragmentDownloadsBinding) {
         viewModel.loadAllData(true)
@@ -177,13 +201,14 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
         //binding.viewpager.reduceDragSensitivity()
 
         binding.bookmarkTabs.apply {
-            val tabs = mutableListOf(R.string.tab_downloads)
+            val tabs = mutableListOf(getString(R.string.tab_downloads))
             for (read in viewModel.readList) {
-                tabs.add(read.stringRes)
+                tabs.add(read.name)
             }
-            TabLayoutMediator(this, binding.viewpager) { tab, position ->
-                tab.setId(tabs[position]).setText(tabs[position])
-            }.attach()
+            tabLayoutMediator?.detach()
+            tabLayoutMediator = TabLayoutMediator(this, binding.viewpager) { tab, position ->
+                tab.text = tabs.getOrNull(position) ?: ""
+            }.also { it.attach() }
 
             addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab?) {

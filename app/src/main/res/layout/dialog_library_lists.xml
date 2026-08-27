@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <TextView
+        android:id="@+id/library_lists_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/library_lists_settings"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:textColor="?attr/textColor"
+        android:padding="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/library_lists_settings_desc"
+        android:textSize="13sp"
+        android:textColor="?attr/grayTextColor"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/library_lists_recycler_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="8dp"
+        tools:listitem="@layout/item_library_list" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/library_lists_add_btt"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="12dp"
+        android:text="@string/library_list_add"
+        app:icon="@drawable/ic_baseline_add_24"
+        style="@style/WhiteButton" />
+</LinearLayout>

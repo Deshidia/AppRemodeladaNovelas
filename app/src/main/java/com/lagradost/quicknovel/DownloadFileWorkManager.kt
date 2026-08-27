@@ -28,6 +28,7 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
         const val ID_REFRESH_DOWNLOADS = "REFRESH_DOWNLOADS"
         const val ID_REFRESH_READINGPROGRESS = "REFRESH_READINGPROGRESS"
         const val ID_DOWNLOAD = "ID_DOWNLOAD"
+        const val LIST_ID = "list_id"
 
 
         private var _viewModel: WeakReference<DownloadViewModel> = WeakReference(null)
@@ -82,7 +83,7 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
             }
 
 
-        fun refreshAllReadingProgress(from: DownloadViewModel, context: Context, currentTab: Int) {
+        fun refreshAllReadingProgress(from: DownloadViewModel, context: Context, currentTab: Int, listId: Int) {
             viewModel = from
             val uniqueWorkName = "${ID_REFRESH_READINGPROGRESS}_$currentTab"
             getWorkerManager(context).enqueueUniqueWork(
@@ -93,6 +94,7 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
                         Data.Builder()
                             .putString(ID, ID_REFRESH_READINGPROGRESS)
                             .putInt(CURRENT_TAB, currentTab)
+                            .putInt(LIST_ID, listId)
                             .build()
                     )
                     .build()
@@ -163,8 +165,9 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
 
             ID_REFRESH_READINGPROGRESS ->{
                 val currentTab = this.workerParams.inputData.getInt(CURRENT_TAB, 1)
+                val listId = this.workerParams.inputData.getInt(LIST_ID, 0)
                 viewModel?.setIsLoading(true, currentTab)
-                BookDownloader2.getOldDataReadingProgress(currentTab)
+                BookDownloader2.getOldDataReadingProgress(listId)
                 viewModel?.setIsLoading(false, currentTab)
             }
 

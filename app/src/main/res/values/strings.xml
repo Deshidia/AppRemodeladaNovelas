@@ -119,6 +119,21 @@
     <string name="type_dropped">Dropped</string>
     <string name="type_plan_to_read">Plan to Read</string>
     <string name="type_none">None</string>
+
+    <!-- library lists (Settings > Library lists) -->
+    <string name="library_lists_key">library_lists_key</string>
+    <string name="library_lists_settings">Library lists</string>
+    <string name="library_lists_settings_desc">Create, rename, delete or reorder the lists used to organize your library, instead of only using the default ones.</string>
+    <string name="library_list_add">Add list</string>
+    <string name="library_list_add_hint">List name</string>
+    <string name="library_list_rename">Rename list</string>
+    <string name="library_list_delete">Delete list</string>
+    <string name="library_list_reorder">Reorder list</string>
+    <string name="library_list_delete_confirm">Delete \"%s\"? Novels in this list will not be deleted from your device.</string>
+    <string name="library_list_delete_move_to">Move its novels to</string>
+    <string name="library_list_delete_move_none">Don\'t assign them to any list</string>
+    <string name="library_list_name_empty">Enter a name for the list</string>
+    <string name="library_list_last_one">You need at least one library list</string>
     <string name="has_read">Has read</string>
 
     <string name="read_display_settings">Settings</string>

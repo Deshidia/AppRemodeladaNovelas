@@ -57,7 +57,6 @@ import com.lagradost.quicknovel.ImageDownloader.getImageBitmapFromUrl
 import com.lagradost.quicknovel.NotificationHelper.etaToString
 import com.lagradost.quicknovel.extractors.ExtractorApi
 import com.lagradost.quicknovel.mvvm.logError
-import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getBasePath
 import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getDefaultDir
@@ -1199,20 +1198,16 @@ object BookDownloader2 {
     }
 
 
-    suspend fun getOldDataReadingProgress(currentTabIndex: Int) {
+    /** Refreshes the chapter count of every novel currently assigned to the
+     * library list with id [listId]. [listId] <= 0 means the "Downloads" tab,
+     * which has no associated library list, so nothing is done. */
+    suspend fun getOldDataReadingProgress(listId: Int) {
+        if (listId <= 0) return
         val keys = getKeys(RESULT_BOOKMARK_STATE) ?: return
-        val readList = arrayListOf(
-            ReadType.READING,
-            ReadType.READING,
-            ReadType.ON_HOLD,
-            ReadType.PLAN_TO_READ,
-            ReadType.COMPLETED,
-            ReadType.DROPPED,
-        )
         coroutineScope {
             for (key in keys) {
                 val state = getKey<Int>(key)
-                if (state == readList[currentTabIndex].prefValue) {
+                if (state == listId) {
                     val id = key.replaceFirst(RESULT_BOOKMARK_STATE, RESULT_BOOKMARK)
                     val cached = getKey<ResultCached>(id) ?: continue
                     launch {

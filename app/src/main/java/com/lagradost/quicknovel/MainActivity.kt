@@ -53,6 +53,7 @@ import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.mvvm.safe
 import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.providers.RedditProvider
+import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.result.ResultFragment
@@ -73,6 +74,7 @@ import com.lagradost.quicknovel.util.UIHelper.dismissSafe
 import com.lagradost.quicknovel.util.UIHelper.getResourceColor
 import com.lagradost.quicknovel.util.UIHelper.html
 import com.lagradost.quicknovel.util.UIHelper.popupMenu
+import com.lagradost.quicknovel.util.UIHelper.popupMenuNamed
 import com.lagradost.quicknovel.util.UIHelper.setImage
 import com.lagradost.safefile.SafeFile
 import kotlinx.coroutines.Dispatchers
@@ -590,10 +592,11 @@ class MainActivity : AppCompatActivity() {
             true
         }*/
 
-        observe(viewModel.readState) {
+        observe(viewModel.readState) { state ->
             bottomPreviewBinding?.apply {
-                bookmark.setIconResource(if (it == ReadType.NONE) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24)
-                bookmark.setText(it.stringRes)
+                val listName = LibraryListManager.getLists().find { it.id == state }?.name
+                bookmark.setIconResource(if (listName == null) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24)
+                bookmark.text = listName ?: getString(R.string.bookmark)
             }
         }
 
@@ -633,9 +636,14 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         bookmark.setOnClickListener { view ->
-                            view.popupMenu(
-                                ReadType.entries.map { it.prefValue to it.stringRes },
-                                selectedItemId = viewModel.readState.value?.prefValue
+                            val lists = LibraryListManager.getLists()
+                            val items = mutableListOf(
+                                ReadType.NONE.prefValue to getString(R.string.type_none)
+                            )
+                            lists.forEach { items.add(it.id to it.name) }
+                            view.popupMenuNamed(
+                                items,
+                                selectedItemId = viewModel.readState.value ?: ReadType.NONE.prefValue
                             ) {
                                 viewModel.bookmark(itemId)
                             }

@@ -38,6 +38,7 @@ import com.lagradost.quicknovel.mvvm.debugException
 import com.lagradost.quicknovel.mvvm.observe
 import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.ui.BaseFragment
+import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainAdapter
@@ -585,13 +586,19 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
 
             resultBookmark.setOnClickListener { view ->
                 val context = view.context ?: return@setOnClickListener
+                val lists = LibraryListManager.getLists()
+                val ids = mutableListOf(ReadType.NONE.prefValue)
+                val names = mutableListOf(context.getString(R.string.type_none))
+                lists.forEach { list ->
+                    ids.add(list.id)
+                    names.add(list.name)
+                }
                 context.showBottomDialog(
-                    ReadType.entries.map { context.getString(it.stringRes) },
-                    selectedIndex = ReadType.entries.map { it.prefValue }
-                        .indexOf(viewModel.readState.value?.prefValue),
+                    names,
+                    selectedIndex = ids.indexOf(viewModel.readState.value ?: ReadType.NONE.prefValue),
                     context.getString(R.string.bookmark), false, {}
                 ) { selected ->
-                    viewModel.bookmark(ReadType.entries[selected].prefValue)
+                    viewModel.bookmark(ids[selected])
                 }
             }
 
@@ -652,13 +659,17 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
 
         observe(viewModel.readState) { state ->
-            binding.resultBookmark.setText(if (state == ReadType.NONE) R.string.bookmark else state.stringRes)
+            val listName = LibraryListManager.getLists().find { it.id == state }?.name
+            if (listName != null) {
+                binding.resultBookmark.text = listName
+            } else {
+                binding.resultBookmark.setText(R.string.bookmark)
+            }
             binding.resultBookmark.setCompoundDrawablesWithIntrinsicBounds(
                 0,
                 0,
                 0,
-                if (state == ReadType.NONE) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24
-                //if (it == ReadType.NONE) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24
+                if (listName == null) R.drawable.ic_baseline_bookmark_border_24 else R.drawable.ic_baseline_bookmark_24
             )
         }
         observe(viewModel.loadResponse, ::newState)

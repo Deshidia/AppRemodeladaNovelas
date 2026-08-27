@@ -92,6 +92,21 @@
     <string name="type_plan_to_read">Planeo leer</string>
     <string name="type_none">Ninguno</string>
 
+    <!-- listas de biblioteca (Ajustes > Listas de la biblioteca) -->
+    <string name="library_lists_key">library_lists_key</string>
+    <string name="library_lists_settings">Listas de la biblioteca</string>
+    <string name="library_lists_settings_desc">Crea, renombra, elimina o reordena las listas usadas para organizar tu biblioteca, en lugar de usar solo las predeterminadas.</string>
+    <string name="library_list_add">Añadir lista</string>
+    <string name="library_list_add_hint">Nombre de la lista</string>
+    <string name="library_list_rename">Renombrar lista</string>
+    <string name="library_list_delete">Eliminar lista</string>
+    <string name="library_list_reorder">Reordenar lista</string>
+    <string name="library_list_delete_confirm">¿Eliminar \"%s\"? Las novelas de esta lista no se borrarán de tu dispositivo.</string>
+    <string name="library_list_delete_move_to">Mover sus novelas a</string>
+    <string name="library_list_delete_move_none">No asignarlas a ninguna lista</string>
+    <string name="library_list_name_empty">Escribe un nombre para la lista</string>
+    <string name="library_list_last_one">Necesitas al menos una lista de biblioteca</string>
+
     <!-- Interfaz del Lector -->
     <string name="read_action_settings">Ajustes</string>
     <string name="read_action_chapters">Capítulos</string>
