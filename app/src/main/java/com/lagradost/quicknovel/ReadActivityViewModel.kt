@@ -1012,7 +1012,7 @@ class ReadActivityViewModel : ViewModel() {
             val filePrefix =
                 "ml_${textHash}.${currentSettings.from}_to_${currentSettings.to}.${
                 if (currentSettings.useOnlineTranslation) "online" 
-                else if (currentSettings.useAiTranslation) "ai_${mlAiModel.replace(Regex("[^a-zA-Z0-9]"), "_")}"
+                else if (currentSettings.useAiTranslation) "ai_${mlAiModel.replace(Regex("[^a-zA-Z0-9]"), "_")}_${hashString(mlAiPrompt.toByteArray()).take(8)}"
                 else "offline"
             }"
 
@@ -1057,7 +1057,8 @@ class ReadActivityViewModel : ViewModel() {
                     mlAiApiKey,
                     mlAiModel,
                     currentSettings.from,
-                    currentSettings.to
+                    currentSettings.to,
+                    mlAiPrompt
                 ) { progress, total ->
                     loading.invoke(Triple(spans[0].index, progress, total))
                 }
@@ -2030,6 +2031,14 @@ class ReadActivityViewModel : ViewModel() {
         "gemini-1.5-flash",
         String::class,
         mlAiModelLive
+    )
+
+    val mlAiPromptLive: MutableLiveData<String> = MutableLiveData("")
+    var mlAiPrompt by PreferenceDelegateLiveView(
+        EPUB_ML_AI_PROMPT,
+        "",
+        String::class,
+        mlAiPromptLive
     )
 
     /*

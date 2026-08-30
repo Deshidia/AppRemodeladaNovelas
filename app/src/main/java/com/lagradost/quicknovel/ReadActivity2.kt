@@ -1391,6 +1391,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 viewModel.mlAiModel = s?.toString() ?: ""
             }
 
+            bindingSettings.readAiPrompt.setText(viewModel.mlAiPrompt)
+            bindingSettings.readAiPrompt.doAfterTextChanged { s ->
+                viewModel.mlAiPrompt = s?.toString() ?: ""
+            }
+
             bindingSettings.readApplyTranslation.setOnClickListener { view ->
                 if (view == null) return@setOnClickListener
                 ioSafe {
@@ -1418,6 +1423,18 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         showToast(t.message ?: t.toString())
                     }
                 }
+            }
+
+            // Long-press "Aplicar" to force a fresh AI translation of the current chapter,
+            // bypassing the cache. Useful when a previous attempt partially failed
+            // (timeout / model overloaded) and left a mix of translated and original text cached.
+            bindingSettings.readApplyTranslation.setOnLongClickListener { view ->
+                if (view == null) return@setOnLongClickListener false
+                if (!viewModel.mlUseAiTranslation) return@setOnLongClickListener false
+                showToast(R.string.retranslating_chapter)
+                viewModel.reTranslateChapter(viewModel.currentIndex)
+                bottomSheetDialog.dismiss()
+                true
             }
 
             bindingSettings.readMlTo.text =

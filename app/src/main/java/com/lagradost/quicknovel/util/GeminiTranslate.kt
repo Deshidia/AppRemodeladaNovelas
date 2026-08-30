@@ -58,8 +58,8 @@ object GeminiTranslate {
 
     private val geminiApp = Requests(
         OkHttpClient.Builder()
-            .connectTimeout(60, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(150, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .build(),
         responseParser = object : ResponseParser {
@@ -79,6 +79,7 @@ object GeminiTranslate {
         model: String,
         from: String,
         to: String,
+        customPrompt: String = "",
         loading: suspend (Int, Int) -> Unit = { _, _ -> }
     ): List<String> {
         if (paragraphs.isEmpty()) return paragraphs
@@ -99,7 +100,7 @@ object GeminiTranslate {
         chunks.forEachIndexed { i, chunk ->
             loading.invoke(i, chunks.size)
             val translatedChunk = try {
-                translateChunk(chunk, apiKey, targetModel, fromLang, toLang)
+                translateChunk(chunk, apiKey, targetModel, fromLang, toLang, customPrompt)
             } catch (e: GeminiFatalException) {
                 // Propagate fatal errors (like API Key issues or Region) to inform the user
                 throw e
@@ -143,17 +144,30 @@ object GeminiTranslate {
         apiKey: String,
         model: String,
         from: String,
-        to: String
+        to: String,
+        customPrompt: String = ""
     ): List<String> {
         var retryNumber = 0
         val maxRetry = 2
         val formattedText = paragraphs.joinToString("\n") { "$START_TAG$it$END_TAG" }
 
+        // Optional user-defined glossary/style notes. Kept as a clearly separate, unnumbered
+        // block so the model never confuses it with the structural tag rules below, and never
+        // treats it as license to strip the <t> tags.
+        val notesSection = if (customPrompt.isNotBlank()) {
+            "\nADDITIONAL NOTES (glossary/style — apply these on top of the rules above; " +
+                    "they never override rule 1 or rule 2, the $START_TAG/$END_TAG tags must " +
+                    "always remain exactly as given):\n" +
+                    customPrompt.trim() + "\n"
+        } else ""
+
         val prompt = "You are a professional literary translator. Translate the following text from $from to $to.\n" +
-                "STRICT RULES:\n" +
-                "1. Keep the $START_TAG and $END_TAG tags exactly as they are.\n" +
-                "2. Translate only the content inside the tags.\n" +
-                "3. Respond ONLY with the translated XML structure.\n\n" +
+                "STRICT RULES (never break these, no matter what the notes below say):\n" +
+                "1. Keep the $START_TAG and $END_TAG tags exactly as they are, one pair per paragraph, never removed.\n" +
+                "2. Translate only the content inside the tags. Never delete, merge, or add tag pairs.\n" +
+                "3. Respond ONLY with the translated XML structure — no extra commentary, no code fences, no notes.\n" +
+                "4. Your response must contain exactly ${paragraphs.size} $START_TAG...$END_TAG pairs, in the same order as the input.\n" +
+                notesSection + "\n" +
                 formattedText
 
         val body = mapOf(
@@ -181,6 +195,11 @@ object GeminiTranslate {
                     if (responseRaw.code == 429) {
                         Log.w(TAG, "Rate limit hit, waiting longer...")
                         delay(5000L * (retryNumber + 1))
+                    }
+                    if (responseRaw.code == 503) {
+                        // Model temporarily overloaded on Google's side, not our fault - back off longer.
+                        Log.w(TAG, "Model overloaded (503), waiting longer...")
+                        delay(8000L * (retryNumber + 1))
                     }
                 }
 

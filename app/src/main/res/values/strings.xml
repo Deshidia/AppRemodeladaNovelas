@@ -269,6 +269,9 @@
     <string name="ai_translate">Traducción con IA</string>
     <string name="gemini_api_key">Gemini API Key</string>
     <string name="gemini_model">Gemini Model</string>
+    <string name="gemini_prompt">Gemini Prompt</string>
+    <string name="gemini_prompt_hint">Instrucciones extra (opcional). Ej: \"Frodo\" debe traducirse como \"Frodo\", nunca lo traduzcas literalmente.</string>
+    <string name="retranslating_chapter">Retraduciendo capítulo…</string>
     <string name="toWhatLanguague">-></string>
     <string name="start_chapter">Skipped chapters</string>
     <string name="tts_speed">TTS Speed</string>
