@@ -271,7 +271,20 @@
     <string name="gemini_model">Gemini Model</string>
     <string name="gemini_prompt">Gemini Prompt</string>
     <string name="gemini_prompt_hint">Instrucciones extra (opcional). Ej: \"Frodo\" debe traducirse como \"Frodo\", nunca lo traduzcas literalmente.</string>
+    <string name="ai_advanced_settings">Configuración avanzada de IA</string>
+    <string name="ai_thinking_level_label">Nivel de pensamiento</string>
+    <string name="ai_thinking_hint">Controla cuánto "razona" el modelo antes de responder (más alto = más lento pero puede mejorar la calidad). Solo aplica a modelos compatibles (Gemini 2.5 y 3.x).</string>
+    <string name="thinking_level_auto">Automático</string>
+    <string name="thinking_level_off">Desactivado</string>
+    <string name="thinking_level_low">Bajo</string>
+    <string name="thinking_level_medium">Medio</string>
+    <string name="thinking_level_high">Alto</string>
+    <string name="ai_temperature_format">Temperatura: %.2f</string>
+    <string name="ai_top_p_format">Top-P: %.2f</string>
+    <string name="ai_top_k_format">Top-K: %d</string>
     <string name="retranslating_chapter">Retraduciendo capítulo…</string>
+    <string name="show_original_text">Ver texto original</string>
+    <string name="show_translated_text">Ver traducción</string>
     <string name="toWhatLanguague">-></string>
     <string name="start_chapter">Skipped chapters</string>
     <string name="tts_speed">TTS Speed</string>

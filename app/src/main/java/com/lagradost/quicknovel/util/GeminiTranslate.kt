@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.nicehttp.Requests
 import com.lagradost.nicehttp.ResponseParser
+import com.lagradost.quicknovel.GeminiThinkingLevel
 import com.lagradost.quicknovel.ReadActivityViewModel
 import com.lagradost.quicknovel.mvvm.logError
 import kotlinx.coroutines.delay
@@ -73,6 +74,47 @@ object GeminiTranslate {
         }
     )
 
+    // Models that support any form of "thinking" (and thus a thinkingConfig block).
+    // Sending thinkingConfig to a model that doesn't support it results in a 400 error,
+    // so this must stay conservative.
+    private val thinkingCapableRegex = Regex("gemini-(2\\.5|3(\\.\\d+)?)")
+    private fun modelSupportsThinking(model: String): Boolean {
+        val m = model.lowercase()
+        return thinkingCapableRegex.containsMatchIn(m) || m.contains("thinking")
+    }
+
+    // Gemini 3.x exposes a coarse thinkingLevel enum (LOW/MEDIUM/HIGH). Older thinking-capable
+    // models (Gemini 2.5) only understand a numeric thinkingBudget, so levels are mapped to an
+    // approximate token budget for those.
+    private val gemini3Regex = Regex("gemini-3(\\.\\d+)?")
+    private fun isGemini3(model: String) = gemini3Regex.containsMatchIn(model.lowercase())
+
+    private fun buildThinkingConfig(model: String, level: GeminiThinkingLevel): Map<String, Any>? {
+        if (level == GeminiThinkingLevel.AUTO) return null
+        if (!modelSupportsThinking(model)) return null
+
+        if (isGemini3(model)) {
+            // Gemini 3 doesn't support disabling thinking entirely on every model, so "OFF"
+            // is treated the same as "AUTO" (leave the default in place) for this family.
+            val mapped = when (level) {
+                GeminiThinkingLevel.LOW -> "LOW"
+                GeminiThinkingLevel.MEDIUM -> "MEDIUM"
+                GeminiThinkingLevel.HIGH -> "HIGH"
+                else -> return null
+            }
+            return mapOf("thinkingLevel" to mapped)
+        }
+
+        val budget = when (level) {
+            GeminiThinkingLevel.OFF -> 0
+            GeminiThinkingLevel.LOW -> 1024
+            GeminiThinkingLevel.MEDIUM -> 8192
+            GeminiThinkingLevel.HIGH -> 24576
+            else -> return null
+        }
+        return mapOf("thinkingBudget" to budget)
+    }
+
     suspend fun geminiTranslate(
         paragraphs: List<String>,
         apiKey: String,
@@ -80,6 +122,10 @@ object GeminiTranslate {
         from: String,
         to: String,
         customPrompt: String = "",
+        thinkingLevel: GeminiThinkingLevel = GeminiThinkingLevel.AUTO,
+        temperature: Float = 0.1f,
+        topP: Float = 0.95f,
+        topK: Int = 40,
         loading: suspend (Int, Int) -> Unit = { _, _ -> }
     ): List<String> {
         if (paragraphs.isEmpty()) return paragraphs
@@ -100,7 +146,10 @@ object GeminiTranslate {
         chunks.forEachIndexed { i, chunk ->
             loading.invoke(i, chunks.size)
             val translatedChunk = try {
-                translateChunk(chunk, apiKey, targetModel, fromLang, toLang, customPrompt)
+                translateChunk(
+                    chunk, apiKey, targetModel, fromLang, toLang, customPrompt,
+                    thinkingLevel, temperature, topP, topK
+                )
             } catch (e: GeminiFatalException) {
                 // Propagate fatal errors (like API Key issues or Region) to inform the user
                 throw e
@@ -139,13 +188,30 @@ object GeminiTranslate {
         return matches
     }
 
+    // Novels frequently contain mature themes (violence, romance, adult language) that are part
+    // of the source material and need to be translated faithfully rather than watered down or
+    // blocked. Gemini's default safety thresholds can flag/refuse ordinary literary content, so
+    // every configurable category is set to the most permissive threshold the API exposes.
+    // Note: this only affects Gemini's own configurable content filters - it does not (and
+    // cannot) bypass Google's non-configurable baseline policies (e.g. CSAM).
+    private val safetySettings = listOf(
+        mapOf("category" to "HARM_CATEGORY_HARASSMENT", "threshold" to "BLOCK_NONE"),
+        mapOf("category" to "HARM_CATEGORY_HATE_SPEECH", "threshold" to "BLOCK_NONE"),
+        mapOf("category" to "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold" to "BLOCK_NONE"),
+        mapOf("category" to "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold" to "BLOCK_NONE"),
+    )
+
     private suspend fun translateChunk(
         paragraphs: List<String>,
         apiKey: String,
         model: String,
         from: String,
         to: String,
-        customPrompt: String = ""
+        customPrompt: String = "",
+        thinkingLevel: GeminiThinkingLevel = GeminiThinkingLevel.AUTO,
+        temperature: Float = 0.1f,
+        topP: Float = 0.95f,
+        topK: Int = 40
     ): List<String> {
         var retryNumber = 0
         val maxRetry = 2
@@ -170,15 +236,25 @@ object GeminiTranslate {
                 notesSection + "\n" +
                 formattedText
 
+        val generationConfig = mutableMapOf<String, Any>(
+            "temperature" to temperature,
+            "topP" to topP,
+            "topK" to topK
+        )
+
+        // thinkingLevel (Gemini 3.x) and thinkingBudget (Gemini 2.5) are mutually exclusive and
+        // only valid on models that support thinking at all - buildThinkingConfig already
+        // accounts for both restrictions and returns null when the field shouldn't be sent.
+        buildThinkingConfig(model, thinkingLevel)?.let {
+            generationConfig["thinkingConfig"] = it
+        }
+
         val body = mapOf(
             "contents" to listOf(
                 mapOf("parts" to listOf(mapOf("text" to prompt)))
             ),
-            "generationConfig" to mapOf(
-                "temperature" to 0.1,
-                "topP" to 0.95,
-                "topK" to 40
-            )
+            "generationConfig" to generationConfig,
+            "safetySettings" to safetySettings
         )
 
         while (retryNumber <= maxRetry) {
@@ -223,6 +299,8 @@ object GeminiTranslate {
                         return parsed
                     }
                     Log.w(TAG, "Parsed size mismatch (${parsed.size}/${paragraphs.size}). Retry $retryNumber")
+                } else if (response.candidates?.firstOrNull()?.finishReason == "SAFETY") {
+                    Log.w(TAG, "Response blocked by safety filter despite BLOCK_NONE settings, retrying")
                 }
 
                 retryNumber++

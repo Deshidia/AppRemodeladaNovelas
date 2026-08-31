@@ -135,6 +135,23 @@ class PreferenceDelegate<T : Any>(
     }
 }
 
+enum class GeminiThinkingLevel {
+    AUTO, OFF, LOW, MEDIUM, HIGH;
+
+    companion object {
+        val list = listOf(
+            AUTO to R.string.thinking_level_auto,
+            OFF to R.string.thinking_level_off,
+            LOW to R.string.thinking_level_low,
+            MEDIUM to R.string.thinking_level_medium,
+            HIGH to R.string.thinking_level_high
+        )
+
+        fun fromName(name: String): GeminiThinkingLevel =
+            entries.firstOrNull { it.name == name } ?: AUTO
+    }
+}
+
 class PreferenceDelegateLiveView<T : Any>(
     val key: String, val default: T, klass: KClass<T>, private val _liveData: MutableLiveData<T>
 ) {
@@ -587,6 +604,17 @@ class ReadActivityViewModel : ViewModel() {
     var currentIndex = Int.MIN_VALUE
         private set
 
+    // Session-only toggle (not persisted): when true, chapters are displayed using their
+    // original (non-translated) text instead of the translated one, without discarding the
+    // translation - both are already kept per-chapter in LiveChapterData.
+    private val _showOriginalText = MutableLiveData(false)
+    val showOriginalTextLive: LiveData<Boolean> = _showOriginalText
+
+    fun toggleShowOriginalText() {
+        _showOriginalText.value = !(_showOriginalText.value ?: false)
+        updateReadArea()
+    }
+
 
 
 
@@ -609,10 +637,11 @@ class ReadActivityViewModel : ViewModel() {
 
     fun reTranslateChapter(index: Int) = ioSafe {
         hasExpanded.clear() // will unfuck the rest
-        val notify = chapterMutex.withLock {
-            chapterData[index] is Resource.Failure
-        }
-        loadIndividualChapter(index, reload = false, reTranslate = true, notify = notify)
+        // Use the same full-screen loading indicator as "Aplicar" (postLoading = true) so the
+        // user actually sees that a retranslation is happening, instead of it silently updating
+        // chapterData in the background with no visible feedback.
+        _loadingStatus.postValue(Resource.Loading(context?.getString(R.string.translating)))
+        loadIndividualChapter(index, reload = false, reTranslate = true, notify = true, postLoading = true)
         updateReadArea(seekToDesired = false)
     }
 
@@ -697,7 +726,7 @@ class ReadActivityViewModel : ViewModel() {
             }
 
             is Resource.Success -> {
-                data.value.spans
+                if (_showOriginalText.value == true) data.value.originalSpans else data.value.spans
             }
 
             is Resource.Failure -> listOf<SpanDisplay>(
@@ -1012,7 +1041,7 @@ class ReadActivityViewModel : ViewModel() {
             val filePrefix =
                 "ml_${textHash}.${currentSettings.from}_to_${currentSettings.to}.${
                 if (currentSettings.useOnlineTranslation) "online" 
-                else if (currentSettings.useAiTranslation) "ai_${mlAiModel.replace(Regex("[^a-zA-Z0-9]"), "_")}_${hashString(mlAiPrompt.toByteArray()).take(8)}"
+                else if (currentSettings.useAiTranslation) "ai_${mlAiModel.replace(Regex("[^a-zA-Z0-9]"), "_")}_${hashString(mlAiPrompt.toByteArray()).take(8)}_${mlAiThinkingLevel}_${mlAiTemperature}_${mlAiTopP}_${mlAiTopK}"
                 else "offline"
             }"
 
@@ -1058,7 +1087,11 @@ class ReadActivityViewModel : ViewModel() {
                     mlAiModel,
                     currentSettings.from,
                     currentSettings.to,
-                    mlAiPrompt
+                    mlAiPrompt,
+                    thinkingLevel = GeminiThinkingLevel.fromName(mlAiThinkingLevel),
+                    temperature = mlAiTemperature,
+                    topP = mlAiTopP,
+                    topK = mlAiTopK
                 ) { progress, total ->
                     loading.invoke(Triple(spans[0].index, progress, total))
                 }
@@ -2039,6 +2072,41 @@ class ReadActivityViewModel : ViewModel() {
         "",
         String::class,
         mlAiPromptLive
+    )
+
+    // Thinking level for models that support it (Gemini 3.x uses "LOW"/"MEDIUM"/"HIGH" directly,
+    // Gemini 2.5 maps these to an equivalent token budget). "AUTO" leaves the field out entirely
+    // so the model uses its own default, "OFF" disables thinking where possible.
+    val mlAiThinkingLevelLive: MutableLiveData<String> = MutableLiveData(GeminiThinkingLevel.AUTO.name)
+    var mlAiThinkingLevel by PreferenceDelegateLiveView(
+        EPUB_ML_AI_THINKING_LEVEL,
+        GeminiThinkingLevel.AUTO.name,
+        String::class,
+        mlAiThinkingLevelLive
+    )
+
+    val mlAiTemperatureLive: MutableLiveData<Float> = MutableLiveData(0.1f)
+    var mlAiTemperature by PreferenceDelegateLiveView(
+        EPUB_ML_AI_TEMPERATURE,
+        0.1f,
+        Float::class,
+        mlAiTemperatureLive
+    )
+
+    val mlAiTopPLive: MutableLiveData<Float> = MutableLiveData(0.95f)
+    var mlAiTopP by PreferenceDelegateLiveView(
+        EPUB_ML_AI_TOP_P,
+        0.95f,
+        Float::class,
+        mlAiTopPLive
+    )
+
+    val mlAiTopKLive: MutableLiveData<Int> = MutableLiveData(40)
+    var mlAiTopK by PreferenceDelegateLiveView(
+        EPUB_ML_AI_TOP_K,
+        40,
+        Int::class,
+        mlAiTopKLive
     )
 
     /*

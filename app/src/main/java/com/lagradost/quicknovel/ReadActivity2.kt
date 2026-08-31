@@ -730,6 +730,22 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 viewModel.copyChapterToClipboard(viewModel.currentIndex)
                 true
             }
+            inflateMenu(R.menu.read_toolbar_menu)
+            setOnMenuItemClickListener { item ->
+                if (item.itemId == R.id.action_toggle_original_text) {
+                    viewModel.toggleShowOriginalText()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+
+        observe(viewModel.showOriginalTextLive) { showOriginal ->
+            binding.readToolbar.menu.findItem(R.id.action_toggle_original_text)?.apply {
+                setIcon(if (showOriginal) R.drawable.translate_24px else R.drawable.ic_baseline_language_24)
+                setTitle(if (showOriginal) R.string.show_translated_text else R.string.show_original_text)
+            }
         }
 
         //updateTimeText()
@@ -1394,6 +1410,57 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             bindingSettings.readAiPrompt.setText(viewModel.mlAiPrompt)
             bindingSettings.readAiPrompt.doAfterTextChanged { s ->
                 viewModel.mlAiPrompt = s?.toString() ?: ""
+            }
+
+            bindingSettings.readAiThinkingLevel.text = getString(
+                GeminiThinkingLevel.list.first { it.first.name == viewModel.mlAiThinkingLevel }.second
+            )
+            bindingSettings.readAiThinkingLevel.setOnClickListener { view ->
+                if (view == null) return@setOnClickListener
+                val context = view.context
+                val items = GeminiThinkingLevel.list
+
+                context.showDialog(
+                    items.map { context.getString(it.second) },
+                    items.map { it.first.name }.indexOf(viewModel.mlAiThinkingLevel),
+                    context.getString(R.string.ai_thinking_level_label), false, {}
+                ) { index ->
+                    viewModel.mlAiThinkingLevel = items[index].first.name
+                    bindingSettings.readAiThinkingLevel.text = context.getString(items[index].second)
+                }
+            }
+
+            bindingSettings.readAiTemperatureText.text =
+                getString(R.string.ai_temperature_format, viewModel.mlAiTemperature)
+            bindingSettings.readAiTemperature.apply {
+                setValueRounded(viewModel.mlAiTemperature)
+                addOnChangeListener { _, value, _ ->
+                    viewModel.mlAiTemperature = value
+                    bindingSettings.readAiTemperatureText.text =
+                        getString(R.string.ai_temperature_format, value)
+                }
+            }
+
+            bindingSettings.readAiTopPText.text =
+                getString(R.string.ai_top_p_format, viewModel.mlAiTopP)
+            bindingSettings.readAiTopP.apply {
+                setValueRounded(viewModel.mlAiTopP)
+                addOnChangeListener { _, value, _ ->
+                    viewModel.mlAiTopP = value
+                    bindingSettings.readAiTopPText.text =
+                        getString(R.string.ai_top_p_format, value)
+                }
+            }
+
+            bindingSettings.readAiTopKText.text =
+                getString(R.string.ai_top_k_format, viewModel.mlAiTopK)
+            bindingSettings.readAiTopK.apply {
+                setValueRounded(viewModel.mlAiTopK.toFloat())
+                addOnChangeListener { _, value, _ ->
+                    viewModel.mlAiTopK = value.roundToInt()
+                    bindingSettings.readAiTopKText.text =
+                        getString(R.string.ai_top_k_format, value.roundToInt())
+                }
             }
 
             bindingSettings.readApplyTranslation.setOnClickListener { view ->
