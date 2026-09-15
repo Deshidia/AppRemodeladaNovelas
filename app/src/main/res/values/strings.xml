@@ -328,6 +328,11 @@
     <string name="got_null_data">Got null data</string>
     <string name="permission_error">Permission error</string>
     <string name="tts_language_error">Unable to initialize TTS, download the language</string>
+    <string name="tts_mini_player_play_pause">Play/Pause</string>
+    <string name="tts_mini_player_forward">Skip forward</string>
+    <string name="tts_mini_player_backward">Skip backward</string>
+    <string name="tts_mini_player_stop">Stop TTS</string>
+    <string name="tts_mini_player_open_reader">Return to reader</string>
 
     <!-- Some details -->
     <string name="unknown">Unknown</string>

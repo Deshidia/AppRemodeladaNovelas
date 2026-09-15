@@ -23,6 +23,7 @@ import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -160,6 +161,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     lateinit var binding: ReadMainBinding
     private val viewModel: ReadActivityViewModel by viewModels()
 
+    /** Lets other screens (e.g. the library's mini-player) reach this reader's TTS controls
+     * without holding a direct/strong reference to the Activity itself. */
+    fun activeViewModel(): ReadActivityViewModel? = if (this.isDestroyed) null else viewModel
+
     private var _imageHolder: WeakReference<LinearLayout>? = null
     var imageHolder
         get() = _imageHolder?.get()
@@ -231,7 +236,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            kill()
+            exitReader()
             return true
         }
         if ((keyCode != KeyEvent.KEYCODE_VOLUME_DOWN && keyCode != KeyEvent.KEYCODE_VOLUME_UP)) return false
@@ -284,6 +289,23 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             cancel(TTS_NOTIFICATION_ID)
         }
         finish()
+    }
+
+    /** Leaves the reader screen. While TTS is playing or paused we don't want to kill it just
+     * because the user wants to browse the library, so instead of finishing this Activity (which
+     * would tear down the TTS session) we bring the library back to the front and leave this
+     * Activity alive in the background, still running TTS. If TTS isn't active this behaves
+     * exactly like before: close the reader. */
+    private fun exitReader() {
+        if (viewModel.currentTTSStatus != TTSHelper.TTSStatus.IsStopped) {
+            startActivity(
+                Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                }
+            )
+        } else {
+            kill()
+        }
     }
 
     val mBatInfoReceiver: BroadcastReceiver = object : BroadcastReceiver() {
@@ -680,6 +702,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     override fun onDestroy() {
         viewModel.stopTTS()
         this.unregisterReceiver(mBatInfoReceiver)
+        if (readActivity === this) {
+            readActivity = null
+        }
         super.onDestroy()
     }
 
@@ -698,6 +723,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         setContentView(binding.root)
 
         registerBattery()
+
+        onBackPressedDispatcher.addCallback(this) {
+            exitReader()
+        }
 
         viewModel.init(intent, this)
         topBarHeight = binding.readToolbarHolder.minimumHeight + getStatusBarHeight()
@@ -724,7 +753,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         binding.readToolbar.apply {
             setNavigationIcon(R.drawable.ic_baseline_arrow_back_24)
             setNavigationOnClickListener {
-                this@ReadActivity2.onBackPressed()
+                exitReader()
             }
             setOnLongClickListener {
                 viewModel.copyChapterToClipboard(viewModel.currentIndex)

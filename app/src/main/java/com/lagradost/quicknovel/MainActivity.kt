@@ -437,6 +437,51 @@ class MainActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
     }*/
 
+    /**
+     * Shows/updates a small persistent player bar above the bottom navigation whenever a TTS
+     * session is running (even if it was started from a reader screen the user has since left),
+     * and wires its buttons to the same TTS controls the reader uses.
+     */
+    private fun setupTTSMiniPlayer() {
+        val miniPlayer = binding?.ttsMiniPlayer ?: return
+
+        miniPlayer.setOnClickListener {
+            TTSGlobalState.openReader(this)
+        }
+        binding?.ttsMiniPlayerPlayPause?.setOnClickListener {
+            TTSGlobalState.playPause()
+        }
+        binding?.ttsMiniPlayerForward?.setOnClickListener {
+            TTSGlobalState.skipForward()
+        }
+        binding?.ttsMiniPlayerBackward?.setOnClickListener {
+            TTSGlobalState.skipBackward()
+        }
+        binding?.ttsMiniPlayerClose?.setOnClickListener {
+            TTSGlobalState.stop()
+        }
+
+        observeNullable(TTSGlobalState.info) { info ->
+            val bind = binding ?: return@observeNullable
+            if (info == null) {
+                bind.ttsMiniPlayer.isVisible = false
+                return@observeNullable
+            }
+
+            bind.ttsMiniPlayer.isVisible = true
+            bind.ttsMiniPlayerTitle.text = info.chapterTitle?.asStringNull(this)?.let { chapter ->
+                "${info.bookTitle} • $chapter"
+            } ?: info.bookTitle
+
+            bind.ttsMiniPlayerPlayPause.setImageResource(
+                if (info.status == TTSHelper.TTSStatus.IsRunning)
+                    R.drawable.ic_baseline_pause_24
+                else
+                    R.drawable.ic_baseline_play_arrow_24
+            )
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         activity = this
@@ -518,6 +563,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding!!.root)
 
         setUpBackup()
+        setupTTSMiniPlayer()
 
         val navHostFragment =
             supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as NavHostFragment

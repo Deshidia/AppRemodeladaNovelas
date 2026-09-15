@@ -1452,6 +1452,7 @@ class ReadActivityViewModel : ViewModel() {
             _ttsStatus.postValue(value)
             _currentTTSStatus = value
             updateTTSNotification()
+            updateTTSGlobalState()
         }
 
     fun updateTTSNotification(index: Int? = null) {
@@ -1463,6 +1464,20 @@ class ReadActivityViewModel : ViewModel() {
             book.poster(),
             currentTTSStatus,
             context
+        )
+    }
+
+    /** Keeps TTSGlobalState (used by the library's mini-player) in sync with this session. */
+    private fun updateTTSGlobalState(index: Int? = null) {
+        if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) {
+            TTSGlobalState.clear()
+            return
+        }
+        val useIndex = index ?: currentIndex
+        TTSGlobalState.update(
+            book.title(),
+            chaptersTitlesInternal.getOrNull(useIndex),
+            currentTTSStatus
         )
     }
 
@@ -1606,6 +1621,7 @@ class ReadActivityViewModel : ViewModel() {
                             currentTTSStatus,
                             context
                         )
+                        updateTTSGlobalState(index)
                     }
                     notify()
 
