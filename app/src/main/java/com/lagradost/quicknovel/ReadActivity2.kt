@@ -1407,9 +1407,33 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 viewModel.mlAiModel = s?.toString() ?: ""
             }
 
+            bindingSettings.readAiBackupModel.setText(viewModel.mlAiBackupModel)
+            bindingSettings.readAiBackupModel.doAfterTextChanged { s ->
+                viewModel.mlAiBackupModel = s?.toString() ?: ""
+            }
+
             bindingSettings.readAiPrompt.setText(viewModel.mlAiPrompt)
             bindingSettings.readAiPrompt.doAfterTextChanged { s ->
                 viewModel.mlAiPrompt = s?.toString() ?: ""
+            }
+
+            bindingSettings.readAiMaxChars.setText(viewModel.mlAiMaxCharsPerRequest.toString())
+            bindingSettings.readAiMaxChars.doAfterTextChanged { s ->
+                val value = s?.toString()?.toIntOrNull()
+                if (value != null && value > 0) {
+                    viewModel.mlAiMaxCharsPerRequest = value
+                }
+            }
+
+            bindingSettings.readAiMaxRpmText.text =
+                getString(R.string.ai_max_rpm_format, viewModel.mlAiMaxRequestsPerMinute)
+            bindingSettings.readAiMaxRpm.apply {
+                setValueRounded(viewModel.mlAiMaxRequestsPerMinute.toFloat())
+                addOnChangeListener { _, value, _ ->
+                    viewModel.mlAiMaxRequestsPerMinute = value.roundToInt()
+                    bindingSettings.readAiMaxRpmText.text =
+                        getString(R.string.ai_max_rpm_format, value.roundToInt())
+                }
             }
 
             bindingSettings.readAiThinkingLevel.text = getString(

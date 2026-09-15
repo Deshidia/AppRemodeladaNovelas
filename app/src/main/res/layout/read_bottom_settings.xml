@@ -222,6 +222,31 @@
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/read_ai_backup_model_layout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:hint="@string/gemini_backup_model">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/read_ai_backup_model"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/read_ai_backup_model_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:alpha="0.7"
+                    android:text="@string/gemini_backup_model_hint"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/read_ai_prompt_layout"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
@@ -247,6 +272,58 @@
                     android:layout_marginTop="20dp"
                     android:text="@string/ai_advanced_settings"
                     android:textSize="16sp" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/read_ai_max_chars_layout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="15dp"
+                    android:hint="@string/ai_max_chars_label">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/read_ai_max_chars"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/read_ai_max_chars_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:alpha="0.7"
+                    android:text="@string/ai_max_chars_hint"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/read_ai_max_rpm_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="15dp"
+                    tools:text="Peticiones máximas por minuto: 15"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/read_ai_max_rpm"
+                    style="@style/SettingsSliderTheme"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:stepSize="1"
+                    android:value="15"
+                    android:valueFrom="1"
+                    android:valueTo="60" />
+
+                <TextView
+                    android:id="@+id/read_ai_max_rpm_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:alpha="0.7"
+                    android:text="@string/ai_max_rpm_hint"
+                    android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/read_ai_thinking_level_text"

@@ -1091,7 +1091,10 @@ class ReadActivityViewModel : ViewModel() {
                     thinkingLevel = GeminiThinkingLevel.fromName(mlAiThinkingLevel),
                     temperature = mlAiTemperature,
                     topP = mlAiTopP,
-                    topK = mlAiTopK
+                    topK = mlAiTopK,
+                    maxRequestsPerMinute = mlAiMaxRequestsPerMinute,
+                    backupModel = mlAiBackupModel,
+                    maxCharsPerRequest = mlAiMaxCharsPerRequest
                 ) { progress, total ->
                     loading.invoke(Triple(spans[0].index, progress, total))
                 }
@@ -2107,6 +2110,39 @@ class ReadActivityViewModel : ViewModel() {
         40,
         Int::class,
         mlAiTopKLive
+    )
+
+    // Client-side throttle: maximum number of requests sent to the primary AI model within
+    // any rolling 60 second window. Once reached, new requests are routed to mlAiBackupModel
+    // (if configured) instead of waiting, so translation can keep going uninterrupted.
+    val mlAiMaxRequestsPerMinuteLive: MutableLiveData<Int> = MutableLiveData(15)
+    var mlAiMaxRequestsPerMinute by PreferenceDelegateLiveView(
+        EPUB_ML_AI_MAX_RPM,
+        15,
+        Int::class,
+        mlAiMaxRequestsPerMinuteLive
+    )
+
+    // Backup model used automatically once mlAiMaxRequestsPerMinute is reached for the primary
+    // model. Manually typed, exactly like mlAiModel. Left blank to disable the fallback.
+    val mlAiBackupModelLive: MutableLiveData<String> = MutableLiveData("")
+    var mlAiBackupModel by PreferenceDelegateLiveView(
+        EPUB_ML_AI_BACKUP_MODEL,
+        "",
+        String::class,
+        mlAiBackupModelLive
+    )
+
+    // How much text (in characters) is sent to the model per request. The old hardcoded 5000
+    // was very conservative for modern large-context/large-output models. 20000 is a safer
+    // default; models with a bigger output budget (e.g. 65,536 tokens) can raise this in
+    // Settings for far fewer requests. See GeminiTranslate.chunkByParagraphs for the reasoning.
+    val mlAiMaxCharsPerRequestLive: MutableLiveData<Int> = MutableLiveData(20000)
+    var mlAiMaxCharsPerRequest by PreferenceDelegateLiveView(
+        EPUB_ML_AI_MAX_CHARS_PER_REQUEST,
+        20000,
+        Int::class,
+        mlAiMaxCharsPerRequestLive
     )
 
     /*

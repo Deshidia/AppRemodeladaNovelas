@@ -271,7 +271,14 @@
     <string name="gemini_model">Gemini Model</string>
     <string name="gemini_prompt">Gemini Prompt</string>
     <string name="gemini_prompt_hint">Instrucciones extra (opcional). Ej: \"Frodo\" debe traducirse como \"Frodo\", nunca lo traduzcas literalmente.</string>
+    <string name="gemini_backup_model">Modelo de respaldo</string>
+    <string name="gemini_backup_model_hint">Opcional. Escríbelo igual que el modelo principal. Se usará automáticamente al alcanzar el límite de peticiones por minuto.</string>
     <string name="ai_advanced_settings">Configuración avanzada de IA</string>
+    <string name="ai_max_chars_label">Texto máximo por petición (caracteres)</string>
+    <string name="ai_max_chars_hint">Cuánto texto se envía en cada petición a la IA. Más alto = menos peticiones pero respuestas más largas y lentas. Debe caber en el límite de tokens de salida de tu modelo (aprox. 3-4 caracteres por token). En modelos con "pensamiento" (Gemini 2.5/3.x), baja este valor o pon el nivel de pensamiento en "Desactivado" si ves traducciones cortadas.</string>
+    <string name="ai_max_rpm_label">Límite de peticiones por minuto</string>
+    <string name="ai_max_rpm_format">Peticiones máximas por minuto: %d</string>
+    <string name="ai_max_rpm_hint">Al alcanzar este límite con el modelo principal, la app cambiará automáticamente al modelo de respaldo (si está configurado) hasta que vuelva a haber margen.</string>
     <string name="ai_thinking_level_label">Nivel de pensamiento</string>
     <string name="ai_thinking_hint">Controla cuánto "razona" el modelo antes de responder (más alto = más lento pero puede mejorar la calidad). Solo aplica a modelos compatibles (Gemini 2.5 y 3.x).</string>
     <string name="thinking_level_auto">Automático</string>
