@@ -47,6 +47,7 @@ import com.lagradost.quicknovel.BookDownloader2.LOCAL_EPUB_MIN_SIZE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
 import com.lagradost.quicknovel.BookDownloader2Helper.createQuickStream
+import com.lagradost.quicknovel.providers.WebLinkProvider
 import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.BookDownloader2Helper.getDirectory
 import com.lagradost.quicknovel.CommonActivity.activity
@@ -521,7 +522,10 @@ object BookDownloader2Helper {
         index: Int,
         forceReload: Boolean
     ): LoadedChapter? {
-        val path = getFilePath(meta, index)
+        // En páginas abiertas desde un enlace se pueden añadir capítulos al principio (los índices se desplazan),
+        // así que la caché se identifica por la URL del capítulo y no por su posición.
+        val fileIndex = if (meta.apiName == WebLinkProvider.NAME) chapter.url.hashCode() else index
+        val path = getFilePath(meta, fileIndex)
         downloadIndividualChapter(path, getApiFromName(meta.apiName), chapter, forceReload)
         return getChapter(path, index, getStripHtml(), false)
     }
