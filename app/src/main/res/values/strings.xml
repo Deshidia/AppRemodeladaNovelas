@@ -345,4 +345,10 @@
     <string name="more_spacing">More Spacing</string>
     <string name="less_spacing">Less Spacing</string>
     <string name="unable_to_inflate">UI was unable to be created correctly, this is a MAJOR BUG and should be reported immediately %s</string>
+    <string name="history_open_link">Open link</string>
+    <string name="history_open_link_title">Open web page</string>
+    <string name="history_open_link_hint">https://…</string>
+    <string name="history_open_link_invalid">Invalid link</string>
+    <string name="history_open_link_loading">Loading page…</string>
+    <string name="history_open_link_error">Could not load the page</string>
 </resources>

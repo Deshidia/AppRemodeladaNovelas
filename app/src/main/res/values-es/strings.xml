@@ -314,4 +314,10 @@
     <string name="operation_no_implemented">" Esta operación no está implementada."</string>
     <string name="conection_error">Error de conexión.</string>
     <string name="unknown">Desconocido</string>
+    <string name="history_open_link">Abrir enlace</string>
+    <string name="history_open_link_title">Abrir página web</string>
+    <string name="history_open_link_hint">https://…</string>
+    <string name="history_open_link_invalid">Enlace no válido</string>
+    <string name="history_open_link_loading">Cargando página…</string>
+    <string name="history_open_link_error">No se pudo cargar la página</string>
 </resources>

@@ -1,6 +1,13 @@
 package com.lagradost.quicknovel.ui.history
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.res.Configuration
+import android.text.InputType
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import android.view.View
 import androidx.core.view.isVisible
 import androidx.fragment.app.viewModels
@@ -46,6 +53,10 @@ class HistoryFragment : BaseFragment<FragmentHistoryBinding>(
             binding.historyNothingHolder.isVisible = cards.isEmpty()
         }
 
+        binding.historyOpenLinkFab.setOnClickListener {
+            showOpenLinkDialog()
+        }
+
         binding.historyToolbar.setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {
                 R.id.action_history_more -> {
@@ -62,5 +73,47 @@ class HistoryFragment : BaseFragment<FragmentHistoryBinding>(
             }
             return@setOnMenuItemClickListener true
         }
+    }
+
+    private fun showOpenLinkDialog() {
+        val ctx = context ?: return
+        val density = resources.displayMetrics.density
+        val margin = (20 * density).toInt()
+
+        val input = EditText(ctx).apply {
+            hint = getString(R.string.history_open_link_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine()
+            // Si hay un enlace en el portapapeles, lo rellenamos para ahorrar un paso
+            val clip = (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
+                ?.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+            if (clip != null && (clip.startsWith("http://") || clip.startsWith("https://"))) {
+                setText(clip)
+                selectAll()
+            }
+        }
+        val container = FrameLayout(ctx).apply {
+            setPadding(margin, margin / 2, margin, 0)
+            addView(input)
+        }
+
+        val dialog = AlertDialog.Builder(ctx)
+            .setTitle(R.string.history_open_link_title)
+            .setView(container)
+            .setPositiveButton(R.string.ok, null) // se sobreescribe abajo para no cerrar si es inválido
+            .setNegativeButton(R.string.cancel, null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (viewModel.openLink(input.text.toString())) {
+                    dialog.dismiss()
+                } else {
+                    Toast.makeText(ctx, R.string.history_open_link_invalid, Toast.LENGTH_SHORT)
+                        .show()
+                }
+            }
+        }
+        dialog.show()
     }
 }

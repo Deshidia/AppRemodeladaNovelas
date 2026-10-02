@@ -57,7 +57,22 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:paddingTop="5dp"
+            android:paddingBottom="90dp"
             android:id="@+id/history_cardSpace"
             android:orientation="vertical">
     </com.lagradost.quicknovel.widget.AutofitRecyclerView>
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+            android:id="@+id/history_open_link_fab"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="56dp"
+            android:contentDescription="@string/history_open_link"
+            android:text="@string/history_open_link"
+            android:textColor="?attr/textColor"
+            android:textStyle="bold"
+            app:backgroundTint="?attr/primaryGrayBackground"
+            app:elevation="0dp"
+            app:icon="@drawable/ic_baseline_add_24"
+            app:iconTint="?attr/textColor" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

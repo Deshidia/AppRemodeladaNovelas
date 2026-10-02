@@ -9,6 +9,16 @@ import com.lagradost.quicknovel.BaseApplication.Companion.getKeys
 import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.removeKeys
 import com.lagradost.quicknovel.BookDownloader2
+import com.lagradost.quicknovel.BookDownloader2Helper.createQuickStream
+import com.lagradost.quicknovel.ChapterData
+import com.lagradost.quicknovel.CommonActivity.showToast
+import com.lagradost.quicknovel.QuickStreamData
+import com.lagradost.quicknovel.QuickStreamMetaData
+import com.lagradost.quicknovel.providers.WebLinkProvider
+import com.lagradost.quicknovel.mvvm.logError
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.widget.Toast
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.HISTORY_FOLDER
 import com.lagradost.quicknovel.MainActivity
@@ -107,5 +117,32 @@ class HistoryViewModel : ViewModel() {
 
     fun stream(card: ResultCached) {
         BookDownloader2.stream(card)
+    }
+
+    /** Descarga la página del enlace y la abre en el lector. Devuelve false si el enlace no es válido. */
+    fun openLink(rawUrl: String): Boolean {
+        val url = WebLinkProvider.normalizeUrl(rawUrl) ?: return false
+
+        showToast(R.string.history_open_link_loading, Toast.LENGTH_SHORT)
+        ioSafe {
+            try {
+                val page = WebLinkProvider.fetchPage(url)
+                val act = activity ?: return@ioSafe
+                val uri = withContext(Dispatchers.IO) {
+                    act.createQuickStream(
+                        QuickStreamData(
+                            QuickStreamMetaData(page.host, page.title, WebLinkProvider.NAME),
+                            null,
+                            mutableListOf(ChapterData(page.title, url, null, null))
+                        )
+                    )
+                }
+                BookDownloader2.openQuickStream(uri)
+            } catch (t: Throwable) {
+                logError(t)
+                showToast(R.string.history_open_link_error, Toast.LENGTH_LONG)
+            }
+        }
+        return true
     }
 }

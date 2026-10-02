@@ -56,6 +56,7 @@ import com.lagradost.quicknovel.mvvm.safeApiCall
 import com.lagradost.quicknovel.mvvm.safeAsync
 import com.lagradost.quicknovel.mvvm.throwableToResource
 import com.lagradost.quicknovel.providers.RedditProvider
+import com.lagradost.quicknovel.providers.WebLinkProvider
 import com.lagradost.quicknovel.ui.OrientationType
 import com.lagradost.quicknovel.ui.ReadingType
 import com.lagradost.quicknovel.ui.ScrollIndex
@@ -273,6 +274,17 @@ class QuickBook(val data: QuickStreamData) : AbstractBook() {
     }
 
     override fun expand(last: String): Boolean {
+        // Páginas abiertas desde "Abrir enlace": el siguiente capítulo se detectó al descargar la página
+        if (data.meta.apiName == WebLinkProvider.NAME) {
+            val next = data.data.lastOrNull()?.url?.let { WebLinkProvider.getNextUrl(it) }
+                ?: return false
+            // evita bucles (el "siguiente" apunta a un capítulo que ya está en la lista)
+            if (data.data.any { it.url == next }) return false
+            val name = WebLinkProvider.chapterNameFromUrl(next) ?: "Next"
+            data.data.add(ChapterData(name, next, null, null))
+            return true
+        }
+
         try {
             val elements =
                 Jsoup.parse(last).allElements.filterNotNull()

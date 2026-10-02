@@ -56,6 +56,7 @@ import com.lagradost.quicknovel.providers.SkyNovelsProvider
 import com.lagradost.quicknovel.providers.SonicMTLProvider
 import com.lagradost.quicknovel.providers.VynovelProvider
 import com.lagradost.quicknovel.providers.WattpadProvider
+import com.lagradost.quicknovel.providers.WebLinkProvider
 import com.lagradost.quicknovel.providers.WtrLabProvider
 import com.lagradost.quicknovel.providers.WuxiaBoxProvider
 import com.lagradost.quicknovel.providers.WuxiaClickProvider
@@ -148,6 +149,7 @@ class Apis {
                 }
             }
             if (name == RedditProvider().name) return APIRepository(RedditProvider())
+            if (name == WebLinkProvider.NAME) return APIRepository(WebLinkProvider())
             return null
         }
 
