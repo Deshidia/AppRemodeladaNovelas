@@ -2,6 +2,7 @@ package com.lagradost.quicknovel
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.lagradost.quicknovel.ui.UiText
@@ -17,19 +18,26 @@ object TTSGlobalState {
     data class Info(
         val bookTitle: String,
         val chapterTitle: UiText?,
-        val status: TTSHelper.TTSStatus
+        val status: TTSHelper.TTSStatus,
+        /** Portada del libro; null mientras no se haya cargado (o si no tiene). */
+        val poster: Bitmap? = null
     )
 
     private val _info = MutableLiveData<Info?>(null)
     val info: LiveData<Info?> = _info
 
     /** Called by ReadActivityViewModel every time its TTS status changes. */
-    fun update(bookTitle: String, chapterTitle: UiText?, status: TTSHelper.TTSStatus) {
+    fun update(
+        bookTitle: String,
+        chapterTitle: UiText?,
+        status: TTSHelper.TTSStatus,
+        poster: Bitmap? = null
+    ) {
         _info.postValue(
             if (status == TTSHelper.TTSStatus.IsStopped) {
                 null
             } else {
-                Info(bookTitle, chapterTitle, status)
+                Info(bookTitle, chapterTitle, status, poster)
             }
         )
     }

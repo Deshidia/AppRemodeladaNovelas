@@ -1489,7 +1489,8 @@ class ReadActivityViewModel : ViewModel() {
         TTSGlobalState.update(
             book.title(),
             chaptersTitlesInternal.getOrNull(useIndex),
-            currentTTSStatus
+            currentTTSStatus,
+            book.poster()
         )
     }
 

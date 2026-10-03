@@ -467,10 +467,23 @@ class MainActivity : AppCompatActivity() {
                 return@observeNullable
             }
 
+            // Al aparecer, entra deslizándose desde abajo en vez de saltar de golpe
+            val wasHidden = !bind.ttsMiniPlayer.isVisible
             bind.ttsMiniPlayer.isVisible = true
-            bind.ttsMiniPlayerTitle.text = info.chapterTitle?.asStringNull(this)?.let { chapter ->
-                "${info.bookTitle} • $chapter"
-            } ?: info.bookTitle
+            if (wasHidden) {
+                bind.ttsMiniPlayer.alpha = 0f
+                bind.ttsMiniPlayer.translationY = 16 * resources.displayMetrics.density
+                bind.ttsMiniPlayer.animate().alpha(1f).translationY(0f).setDuration(220L).start()
+            }
+
+            bind.ttsMiniPlayerTitle.text = info.bookTitle
+            val chapter = info.chapterTitle?.asStringNull(this)
+            bind.ttsMiniPlayerSubtitle.text = chapter
+            bind.ttsMiniPlayerSubtitle.isVisible = !chapter.isNullOrBlank()
+
+            // Sin portada se ve el icono de relleno que hay debajo
+            bind.ttsMiniPlayerCover.setImageBitmap(info.poster)
+            bind.ttsMiniPlayerCover.isVisible = info.poster != null
 
             bind.ttsMiniPlayerPlayPause.setImageResource(
                 if (info.status == TTSHelper.TTSStatus.IsRunning)
