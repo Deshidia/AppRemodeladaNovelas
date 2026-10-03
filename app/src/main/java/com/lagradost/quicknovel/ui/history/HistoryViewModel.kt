@@ -8,7 +8,9 @@ import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeys
 import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.removeKeys
+import com.lagradost.quicknovel.BaseApplication.Companion.setKey
 import com.lagradost.quicknovel.BookDownloader2
+import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.BookDownloader2Helper.createQuickStream
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.CommonActivity.showToast
@@ -24,6 +26,10 @@ import com.lagradost.quicknovel.HISTORY_FOLDER
 import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.MainActivity.Companion.loadResult
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.RESULT_BOOKMARK
+import com.lagradost.quicknovel.RESULT_BOOKMARK_STATE
+import com.lagradost.quicknovel.ui.LibraryListManager
+import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ResultCached
 
@@ -127,6 +133,7 @@ class HistoryViewModel : ViewModel() {
         ioSafe {
             try {
                 val page = WebLinkProvider.fetchPage(url)
+                saveLinkToHistory(url, page)
                 val act = activity ?: return@ioSafe
                 val uri = withContext(Dispatchers.IO) {
                     act.createQuickStream(
@@ -144,5 +151,47 @@ class HistoryViewModel : ViewModel() {
             }
         }
         return true
+    }
+
+    /**
+     * Guarda la página abierta con "Abrir enlace" en el historial para que aparezca en la lista
+     * y se pueda mover a la biblioteca. El id sale de (proveedor, autor, nombre), igual que en
+     * ResultViewModel, así que abrir la misma página otra vez no crea duplicados.
+     */
+    private fun saveLinkToHistory(url: String, page: WebLinkProvider.WebPage) {
+        val id = generateId(WebLinkProvider.NAME, page.host, page.title)
+        setKey(
+            HISTORY_FOLDER, id.toString(), ResultCached(
+                source = url,
+                name = page.title,
+                apiName = WebLinkProvider.NAME,
+                id = id,
+                author = page.host,
+                poster = null,
+                tags = null,
+                rating = null,
+                totalChapters = 1,
+                cachedTime = System.currentTimeMillis()
+            )
+        )
+        updateHistory()
+    }
+
+    /** Id de la lista de la biblioteca donde está guardada [card], o [ReadType.NONE] si no está en ninguna. */
+    fun getLibraryState(card: ResultCached): Int {
+        val state = getKey<Int>(RESULT_BOOKMARK_STATE, card.id.toString()) ?: return ReadType.NONE.prefValue
+        return if (LibraryListManager.getLists().any { it.id == state }) state else ReadType.NONE.prefValue
+    }
+
+    /** Mueve [card] a la lista [state] de la biblioteca; con [ReadType.NONE] la quita de la biblioteca. */
+    fun setLibraryState(card: ResultCached, state: Int) {
+        val key = card.id.toString()
+        if (state == ReadType.NONE.prefValue) {
+            removeKey(RESULT_BOOKMARK, key)
+            removeKey(RESULT_BOOKMARK_STATE, key)
+        } else {
+            setKey(RESULT_BOOKMARK_STATE, key, state)
+            setKey(RESULT_BOOKMARK, key, card.copy(cachedTime = System.currentTimeMillis()))
+        }
     }
 }

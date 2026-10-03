@@ -2,9 +2,12 @@ package com.lagradost.quicknovel.providers
 
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
+import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
+import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.MainActivity.Companion.appWithInterceptor
+import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.USER_AGENT
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -232,6 +235,21 @@ class WebLinkProvider : MainAPI() {
                 main.html()
             }
         }
+    }
+
+    /**
+     * Permite reabrir una página guardada (historial / biblioteca) como cualquier otra novela.
+     * Nombre y autor deben coincidir con los de "Abrir enlace" para que el id (generateId) sea el mismo.
+     */
+    override suspend fun load(url: String): LoadResponse? {
+        val page = fetchPage(url)
+        return StreamResponse(
+            url = url,
+            name = page.title,
+            data = listOf(ChapterData(page.title, url, null, null)),
+            apiName = NAME,
+            author = page.host
+        )
     }
 
     override suspend fun loadHtml(url: String): String? {

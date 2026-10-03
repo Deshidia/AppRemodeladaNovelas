@@ -351,4 +351,5 @@
     <string name="history_open_link_invalid">Invalid link</string>
     <string name="history_open_link_loading">Loading page…</string>
     <string name="history_open_link_error">Could not load the page</string>
+    <string name="history_save_to_library">Save to library</string>
 </resources>
