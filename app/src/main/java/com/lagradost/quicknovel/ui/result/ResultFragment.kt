@@ -38,14 +38,13 @@ import com.lagradost.quicknovel.mvvm.debugException
 import com.lagradost.quicknovel.mvvm.observe
 import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.ui.BaseFragment
+import com.lagradost.quicknovel.ui.LibraryCategoriesDialog
 import com.lagradost.quicknovel.ui.LibraryListManager
-import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.ui.setRecycledViewPool
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
-import com.lagradost.quicknovel.util.SingleSelectionHelper.showBottomDialog
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
@@ -586,19 +585,11 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
 
             resultBookmark.setOnClickListener { view ->
                 val context = view.context ?: return@setOnClickListener
-                val lists = LibraryListManager.getLists()
-                val ids = mutableListOf(ReadType.NONE.prefValue)
-                val names = mutableListOf(context.getString(R.string.type_none))
-                lists.forEach { list ->
-                    ids.add(list.id)
-                    names.add(list.name)
-                }
-                context.showBottomDialog(
-                    names,
-                    selectedIndex = ids.indexOf(viewModel.readState.value ?: ReadType.NONE.prefValue),
-                    context.getString(R.string.bookmark), false, {}
-                ) { selected ->
-                    viewModel.bookmark(ids[selected])
+                LibraryCategoriesDialog.show(
+                    context,
+                    viewModel.readStates.value ?: emptySet()
+                ) { states ->
+                    viewModel.bookmark(states)
                 }
             }
 
@@ -658,8 +649,8 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             }
         }
 
-        observe(viewModel.readState) { state ->
-            val listName = LibraryListManager.getLists().find { it.id == state }?.name
+        observe(viewModel.readStates) { states ->
+            val listName = LibraryListManager.describe(states)
             if (listName != null) {
                 binding.resultBookmark.text = listName
             } else {

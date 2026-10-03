@@ -321,4 +321,6 @@
     <string name="history_open_link_loading">Cargando página…</string>
     <string name="history_open_link_error">No se pudo cargar la página</string>
     <string name="history_save_to_library">Guardar en la biblioteca</string>
+    <string name="library_categories_title">Establecer categorías</string>
+    <string name="library_categories_edit">Editar</string>
 </resources>

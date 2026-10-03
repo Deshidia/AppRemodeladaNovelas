@@ -5,7 +5,9 @@ import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeys
 import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
+import com.lagradost.quicknovel.LIBRARY_NOVEL_LISTS
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.RESULT_BOOKMARK
 import com.lagradost.quicknovel.RESULT_BOOKMARK_STATE
 
 const val LIBRARY_LISTS_KEY = "library_lists_data"
@@ -25,6 +27,9 @@ data class LibraryList(
 
 // Wrapper so Jackson keeps full generic type info when (de)serializing the list.
 data class LibraryListData(val lists: List<LibraryList> = emptyList())
+
+// Ids of the library lists a single novel belongs to (same wrapper trick as above).
+data class LibraryMembership(val ids: List<Int> = emptyList())
 
 /**
  * Handles the user-editable set of library lists. This replaces the previously
@@ -91,22 +96,76 @@ object LibraryListManager {
 
     /**
      * Removes the list with [id]. Every novel currently assigned to it is
-     * migrated to [moveNovelsToId] (pass null / 0 to leave them unclassified,
-     * ie removed from the library but keeping their downloaded files intact).
+     * migrated to [moveNovelsToId] (pass null / 0 to just take them out of this
+     * list; a novel that was in no other list is then removed from the library
+     * but keeps its downloaded files intact).
      */
     fun deleteList(id: Int, moveNovelsToId: Int? = null) {
+        // Hay que averiguar qué novelas la usaban antes de borrarla.
+        val affected = getNovelsInList(id)
         saveLists(getLists().filter { it.id != id })
 
-        val keys = getKeys(RESULT_BOOKMARK_STATE) ?: return
-        for (key in keys) {
-            val state = getKey<Int>(key)
-            if (state == id) {
-                if (moveNovelsToId != null && moveNovelsToId != 0) {
-                    setKey(key, moveNovelsToId)
-                } else {
-                    removeKey(key)
-                }
-            }
+        val target = moveNovelsToId?.takeIf { it != 0 }
+        for (novelId in affected) {
+            // getNovelLists ya ignora la lista recién borrada
+            val remaining = getNovelLists(novelId)
+            setNovelLists(novelId, if (target != null) remaining + target else remaining)
+        }
+    }
+
+    /**
+     * Ids of the lists [novelId] belongs to, in the order the lists are displayed.
+     * Novels saved before multi-list support only have the old single state, which is
+     * used as a fallback.
+     */
+    fun getNovelLists(novelId: Int): Set<Int> {
+        val key = novelId.toString()
+        val saved = getKey<LibraryMembership>(LIBRARY_NOVEL_LISTS, key)?.ids
+            ?: listOfNotNull(getKey<Int>(RESULT_BOOKMARK_STATE, key))
+        return getLists().map { it.id }.filter { it in saved }.toSet()
+    }
+
+    /**
+     * Sets the lists [novelId] belongs to (empty = not in the library). The old single
+     * [RESULT_BOOKMARK_STATE] is kept in sync with the first list: it is still what
+     * identifies which novels are in the library, and it keeps backups readable.
+     * This does not touch the cached novel data ([RESULT_BOOKMARK]).
+     */
+    fun setNovelLists(novelId: Int, ids: Collection<Int>) {
+        val key = novelId.toString()
+        val ordered = getLists().map { it.id }.filter { it in ids }
+        if (ordered.isEmpty()) {
+            removeKey(LIBRARY_NOVEL_LISTS, key)
+            removeKey(RESULT_BOOKMARK_STATE, key)
+        } else {
+            setKey(LIBRARY_NOVEL_LISTS, key, LibraryMembership(ordered))
+            setKey(RESULT_BOOKMARK_STATE, key, ordered.first())
+        }
+    }
+
+    /** Takes the novel out of the library completely (all lists + cached data). */
+    fun removeNovel(novelId: Int) {
+        setNovelLists(novelId, emptySet())
+        removeKey(RESULT_BOOKMARK, novelId.toString())
+    }
+
+    /** Ids of every novel that is in the list [listId]. */
+    fun getNovelsInList(listId: Int): List<Int> {
+        val keys = getKeys(RESULT_BOOKMARK_STATE) ?: return emptyList()
+        return keys.mapNotNull { it.substringAfterLast('/').toIntOrNull() }
+            .filter { listId in getNovelLists(it) }
+    }
+
+    /**
+     * Text for a bookmark button: null when not in any list, the list name when in one,
+     * and "name +N" when in several.
+     */
+    fun describe(ids: Set<Int>): String? {
+        val names = getLists().filter { it.id in ids }.map { it.name }
+        return when {
+            names.isEmpty() -> null
+            names.size == 1 -> names[0]
+            else -> "${names[0]} +${names.size - 1}"
         }
     }
 

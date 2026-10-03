@@ -70,6 +70,9 @@ const val EPUB_CURRENT_POSITION_READ_AT: String = "reader_epub_position_read"
 const val EPUB_CURRENT_POSITION_CHAPTER: String = "reader_epub_position_chapter"
 const val RESULT_BOOKMARK: String = "result_bookmarked"
 const val RESULT_BOOKMARK_STATE: String = "result_bookmarked_state"
+// Listas de la biblioteca a las que pertenece cada novela (puede ser más de una).
+// OJO: getKeys() filtra por prefijo, así que este nombre no puede empezar por "result_bookmarked_state".
+const val LIBRARY_NOVEL_LISTS: String = "library_novel_lists"
 const val HISTORY_FOLDER: String = "result_history"
 const val CURRENT_TAB : String = "current_tab"
 /** When inserting many keys use this function, this is because apply for every key is very expensive on memory */

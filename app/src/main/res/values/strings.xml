@@ -352,4 +352,6 @@
     <string name="history_open_link_loading">Loading page…</string>
     <string name="history_open_link_error">Could not load the page</string>
     <string name="history_save_to_library">Save to library</string>
+    <string name="library_categories_title">Set categories</string>
+    <string name="library_categories_edit">Edit</string>
 </resources>

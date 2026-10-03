@@ -48,6 +48,8 @@ import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
 import com.lagradost.quicknovel.BookDownloader2Helper.createQuickStream
 import com.lagradost.quicknovel.providers.WebLinkProvider
+import com.lagradost.quicknovel.ui.LibraryListManager
+import com.lagradost.quicknovel.ui.LibraryMembership
 import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.BookDownloader2Helper.getDirectory
 import com.lagradost.quicknovel.CommonActivity.activity
@@ -1207,16 +1209,11 @@ object BookDownloader2 {
      * which has no associated library list, so nothing is done. */
     suspend fun getOldDataReadingProgress(listId: Int) {
         if (listId <= 0) return
-        val keys = getKeys(RESULT_BOOKMARK_STATE) ?: return
         coroutineScope {
-            for (key in keys) {
-                val state = getKey<Int>(key)
-                if (state == listId) {
-                    val id = key.replaceFirst(RESULT_BOOKMARK_STATE, RESULT_BOOKMARK)
-                    val cached = getKey<ResultCached>(id) ?: continue
-                    launch {
-                        getNewTotalChapters(cached)
-                    }
+            for (novelId in LibraryListManager.getNovelsInList(listId)) {
+                val cached = getKey<ResultCached>(RESULT_BOOKMARK, novelId.toString()) ?: continue
+                launch {
+                    getNewTotalChapters(cached)
                 }
             }
         }
@@ -1436,6 +1433,11 @@ object BookDownloader2 {
             getKey<Int>(RESULT_BOOKMARK_STATE, from.toString())
         )
         removeKey(RESULT_BOOKMARK_STATE, from.toString())
+
+        getKey<LibraryMembership>(LIBRARY_NOVEL_LISTS, from.toString())?.let { membership ->
+            setKey(LIBRARY_NOVEL_LISTS, to.toString(), membership)
+        }
+        removeKey(LIBRARY_NOVEL_LISTS, from.toString())
 
         setKey(
             DOWNLOAD_EPUB_LAST_ACCESS, to.toString(),

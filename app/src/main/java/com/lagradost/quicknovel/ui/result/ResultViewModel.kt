@@ -31,7 +31,7 @@ import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.PreferenceDelegate
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.RESULT_BOOKMARK
-import com.lagradost.quicknovel.RESULT_BOOKMARK_STATE
+import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_BOOKMARKED
 import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_DOWNLOADED
 import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_READ
@@ -41,7 +41,6 @@ import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.launchSafe
-import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.ui.download.CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.download.LAST_ACCES_SORT
@@ -195,9 +194,9 @@ class ResultViewModel : ViewModel() {
     var isGetLoaded = false
 
     var id: MutableLiveData<Int> = MutableLiveData<Int>(-1)
-    /** The id of the library list this novel currently belongs to, or
-     * [ReadType.NONE].prefValue (0) if it isn't in any list. */
-    var readState: MutableLiveData<Int> = MutableLiveData<Int>(ReadType.NONE.prefValue)
+    /** The ids of the library lists this novel currently belongs to
+     * (empty if it isn't in any list). */
+    var readStates: MutableLiveData<Set<Int>> = MutableLiveData<Set<Int>>(emptySet())
 
     var apiName : String = ""
 
@@ -560,16 +559,14 @@ class ResultViewModel : ViewModel() {
         )
     }
 
-    fun bookmark(state: Int) = viewModelScope.launch {
+    fun bookmark(states: Set<Int>) = viewModelScope.launch {
         loadMutex.withLock {
             if (!hasLoaded) return@launch
-            setKey(
-                RESULT_BOOKMARK_STATE, loadId.toString(), state
-            )
+            LibraryListManager.setNovelLists(loadId, states)
             updateBookmarkData()
         }
 
-        readState.postValue(state)
+        readStates.postValue(LibraryListManager.getNovelLists(loadId))
     }
 
     fun share() = viewModelScope.launch {
@@ -709,9 +706,7 @@ class ResultViewModel : ViewModel() {
     private fun setState(tid: Int) {
         loadId = tid
 
-        readState.postValue(
-            getKey<Int>(RESULT_BOOKMARK_STATE, tid.toString()) ?: ReadType.NONE.prefValue
-        )
+        readStates.postValue(LibraryListManager.getNovelLists(tid))
 
         setKey(
             DOWNLOAD_EPUB_LAST_ACCESS, tid.toString(), System.currentTimeMillis()

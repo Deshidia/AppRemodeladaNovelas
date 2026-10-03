@@ -27,9 +27,7 @@ import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.MainActivity.Companion.loadResult
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.RESULT_BOOKMARK
-import com.lagradost.quicknovel.RESULT_BOOKMARK_STATE
 import com.lagradost.quicknovel.ui.LibraryListManager
-import com.lagradost.quicknovel.ui.ReadType
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ResultCached
 
@@ -177,21 +175,16 @@ class HistoryViewModel : ViewModel() {
         updateHistory()
     }
 
-    /** Id de la lista de la biblioteca donde está guardada [card], o [ReadType.NONE] si no está en ninguna. */
-    fun getLibraryState(card: ResultCached): Int {
-        val state = getKey<Int>(RESULT_BOOKMARK_STATE, card.id.toString()) ?: return ReadType.NONE.prefValue
-        return if (LibraryListManager.getLists().any { it.id == state }) state else ReadType.NONE.prefValue
-    }
+    /** Ids de las listas de la biblioteca en las que está [card] (vacío si no está en ninguna). */
+    fun getLibraryStates(card: ResultCached): Set<Int> = LibraryListManager.getNovelLists(card.id)
 
-    /** Mueve [card] a la lista [state] de la biblioteca; con [ReadType.NONE] la quita de la biblioteca. */
-    fun setLibraryState(card: ResultCached, state: Int) {
-        val key = card.id.toString()
-        if (state == ReadType.NONE.prefValue) {
-            removeKey(RESULT_BOOKMARK, key)
-            removeKey(RESULT_BOOKMARK_STATE, key)
+    /** Pone [card] en las listas [states] de la biblioteca; con un conjunto vacío la quita de la biblioteca. */
+    fun setLibraryStates(card: ResultCached, states: Set<Int>) {
+        LibraryListManager.setNovelLists(card.id, states)
+        if (LibraryListManager.getNovelLists(card.id).isEmpty()) {
+            removeKey(RESULT_BOOKMARK, card.id.toString())
         } else {
-            setKey(RESULT_BOOKMARK_STATE, key, state)
-            setKey(RESULT_BOOKMARK, key, card.copy(cachedTime = System.currentTimeMillis()))
+            setKey(RESULT_BOOKMARK, card.id.toString(), card.copy(cachedTime = System.currentTimeMillis()))
         }
     }
 }

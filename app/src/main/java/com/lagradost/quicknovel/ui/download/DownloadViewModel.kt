@@ -14,7 +14,6 @@ import com.lagradost.quicknovel.APIRepository
 import com.lagradost.quicknovel.BaseApplication.Companion.context
 import com.lagradost.quicknovel.BaseApplication.Companion.getKey
 import com.lagradost.quicknovel.BaseApplication.Companion.getKeys
-import com.lagradost.quicknovel.BaseApplication.Companion.removeKey
 import com.lagradost.quicknovel.BaseApplication.Companion.setKey
 import com.lagradost.quicknovel.BookDownloader2
 import com.lagradost.quicknovel.BookDownloader2.currentDownloads
@@ -271,8 +270,7 @@ class DownloadViewModel : ViewModel() {
     }
 
     fun delete(card: ResultCached) {
-        removeKey(RESULT_BOOKMARK, card.id.toString())
-        removeKey(RESULT_BOOKMARK_STATE, card.id.toString())
+        LibraryListManager.removeNovel(card.id)
         loadAllData(false)
     }
 
@@ -474,13 +472,16 @@ class DownloadViewModel : ViewModel() {
             withContext(Dispatchers.IO) {
                 val keys = getKeys(RESULT_BOOKMARK_STATE)
                 for (key in keys ?: emptyList()) {
-                    val type = getKey<Int>(key) ?: continue
+                    val novelId = key.substringAfterLast('/').toIntOrNull() ?: continue
                     val id = key.replaceFirst(
                         RESULT_BOOKMARK_STATE,
                         RESULT_BOOKMARK
                     )
                     val cached = getKey<ResultCached>(id) ?: continue
-                    mapping[type]?.add(cached)
+                    // Una novela puede estar en varias listas: aparece en cada una de ellas
+                    for (listId in LibraryListManager.getNovelLists(novelId)) {
+                        mapping[listId]?.add(cached)
+                    }
                 }
             }
 
