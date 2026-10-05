@@ -78,7 +78,8 @@
     </com.google.android.material.appbar.AppBarLayout>-->
     <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="0dp"
+            android:layout_weight="1">
 
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
                 android:background="?attr/primaryBlackBackground"
@@ -88,33 +89,10 @@
                 android:layout_height="match_parent">
             <androidx.viewpager2.widget.ViewPager2
                     android:id="@+id/viewpager"
-                    android:paddingBottom="40dp"
-                    android:clipToPadding="false"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     tools:listitem="@layout/viewpager_page" />
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
-
-        <com.google.android.material.tabs.TabLayout
-                android:id="@+id/bookmark_tabs"
-                style="@style/Theme.Widget.Tabs"
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:layout_gravity="bottom"
-                android:background="?attr/primaryGrayBackground"
-                android:descendantFocusability="blocksDescendants"
-                android:focusable="false"
-                android:paddingHorizontal="5dp"
-                app:layout_scrollFlags="noScroll"
-                app:tabGravity="center"
-                app:tabIndicator="@drawable/indicator_background"
-                app:tabIndicatorColor="?attr/white"
-                app:tabIndicatorGravity="center"
-                app:tabIndicatorHeight="30dp"
-                app:tabMode="scrollable"
-                app:tabSelectedTextColor="?attr/primaryBlackBackground"
-                app:tabTextAppearance="@style/TabNoCaps"
-                app:tabTextColor="?attr/textColor" />
 
         <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
                 android:id="@+id/download_fab"
@@ -133,6 +111,45 @@
 
                 android:contentDescription="@string/mainpage_sort_by_button_text"
                 android:layout_marginEnd="16dp"
-                android:layout_marginBottom="56dp" />
+                android:layout_marginBottom="16dp" />
     </FrameLayout>
+
+    <!-- Reproductor TTS entre el contenido y las categorias. El fondo negro hace que la tarjeta
+         flote sobre el contenido igual que en el resto de pantallas; sin sesion TTS no ocupa nada. -->
+    <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/primaryBlackBackground">
+
+        <include
+                android:id="@+id/ttsMiniPlayer"
+                layout="@layout/tts_mini_player"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="4dp"
+                android:visibility="gone" />
+    </FrameLayout>
+
+    <com.google.android.material.tabs.TabLayout
+            android:id="@+id/bookmark_tabs"
+            style="@style/Theme.Widget.Tabs"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:background="?attr/primaryGrayBackground"
+            android:descendantFocusability="blocksDescendants"
+            android:focusable="false"
+            android:paddingHorizontal="5dp"
+            app:layout_scrollFlags="noScroll"
+            app:tabGravity="center"
+            app:tabIndicator="@drawable/indicator_background"
+            app:tabIndicatorColor="?attr/white"
+            app:tabIndicatorGravity="center"
+            app:tabIndicatorHeight="30dp"
+            app:tabMode="scrollable"
+            app:tabSelectedTextColor="?attr/primaryBlackBackground"
+            app:tabTextAppearance="@style/TabNoCaps"
+            app:tabTextColor="?attr/textColor" />
 </LinearLayout>

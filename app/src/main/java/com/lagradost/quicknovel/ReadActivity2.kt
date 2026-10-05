@@ -17,8 +17,8 @@ import android.speech.tts.Voice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.AbsListView
 import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -27,6 +27,7 @@ import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SearchView
 import androidx.core.animation.doOnEnd
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -45,6 +46,7 @@ import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.DataStore.getKey
 import com.lagradost.quicknovel.TTSNotifications.TTS_NOTIFICATION_ID
+import com.lagradost.quicknovel.databinding.ChapterSelectDialogSearchBinding
 import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
 import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
 import com.lagradost.quicknovel.databinding.ReadMainBinding
@@ -929,23 +931,80 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     builderSingle.setTitle(R.string.select_chapter)
                 }
 
+                val dialogBinding = ChapterSelectDialogSearchBinding.inflate(layoutInflater)
+                // altura fija para que el dialogo no cambie de tamano al filtrar
+                dialogBinding.chapterSearchRoot.layoutParams =
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        (resources.displayMetrics.heightPixels * 0.6f).toInt()
+                    )
+
+                val allTitles = titles.map { it.asString(this) }
+                // posiciones (indice real del capitulo) que se muestran ahora mismo en la lista
+                var shownIndices: List<Int> = allTitles.indices.toList()
+
                 val arrayAdapter = ArrayAdapter<String>(this, R.layout.chapter_select_dialog)
+                arrayAdapter.addAll(allTitles)
+                dialogBinding.chapterSearchList.adapter = arrayAdapter
 
-                arrayAdapter.addAll(titles.map { it.asString(this) })
-
+                builderSingle.setView(dialogBinding.root)
                 builderSingle.setNegativeButton(R.string.cancel) { dialog, _ -> dialog.dismiss() }
 
-                builderSingle.setAdapter(arrayAdapter) { _, which ->
-                    viewModel.seekToChapter(which)
+                val dialog = builderSingle.create()
+
+                fun markCurrentChapter() {
+                    val list = dialogBinding.chapterSearchList
+                    list.clearChoices()
+                    val pos = if (validChapter) shownIndices.indexOf(currentChapter) else -1
+                    if (pos >= 0) {
+                        list.setItemChecked(pos, true)
+                    }
+                    arrayAdapter.notifyDataSetChanged()
                 }
 
-                val dialog = builderSingle.create()
-                dialog.show()
+                dialogBinding.chapterSearchList.setOnItemClickListener { _, _, position, _ ->
+                    val realIndex = shownIndices.getOrNull(position) ?: return@setOnItemClickListener
+                    dialog.dismiss()
+                    viewModel.seekToChapter(realIndex)
+                }
 
-                dialog.listView.choiceMode = AbsListView.CHOICE_MODE_SINGLE
+                dialogBinding.chapterSearchBar.setOnQueryTextListener(object :
+                    SearchView.OnQueryTextListener {
+                    private fun filter(query: String?) {
+                        val q = query?.trim().orEmpty()
+                        shownIndices = if (q.isEmpty()) {
+                            allTitles.indices.toList()
+                        } else {
+                            allTitles.indices.filter { allTitles[it].contains(q, ignoreCase = true) }
+                        }
+                        arrayAdapter.clear()
+                        arrayAdapter.addAll(shownIndices.map { allTitles[it] })
+                        markCurrentChapter()
+                    }
+
+                    override fun onQueryTextSubmit(query: String?): Boolean {
+                        filter(query)
+                        dialogBinding.chapterSearchBar.clearFocus()
+                        return true
+                    }
+
+                    override fun onQueryTextChange(newText: String?): Boolean {
+                        filter(newText)
+                        return true
+                    }
+                })
+
+                // que el buscador siga visible al abrir el teclado, sin abrirlo automaticamente
+                dialog.window?.setSoftInputMode(
+                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                            WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+                )
+                dialog.show()
+                dialogBinding.chapterSearchBar.clearFocus()
+
+                markCurrentChapter()
                 if (validChapter) {
-                    dialog.listView.setSelection(currentChapter)
-                    dialog.listView.setItemChecked(currentChapter, true)
+                    dialogBinding.chapterSearchList.setSelection(currentChapter)
                 }
             }
         }
@@ -1410,12 +1469,38 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 }
             }
 
+            // The three translation engines (Google online, DeepL, Gemini AI) are mutually
+            // exclusive: checking one unchecks the other two.
             bindingSettings.readOnlineTranslationSwitch.isChecked = viewModel.mlUseOnlineTransaltion
             bindingSettings.readOnlineTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
                 viewModel.mlUseOnlineTransaltion = isChecked
                 if (isChecked) {
+                    bindingSettings.readDeeplTranslationSwitch.isChecked = false
                     bindingSettings.readAiTranslationSwitch.isChecked = false
                 }
+            }
+
+            // The API key field is only relevant (and only shown) while DeepL is selected.
+            fun updateDeepLKeyVisibility(visible: Boolean) {
+                val visibility = if (visible) View.VISIBLE else View.GONE
+                bindingSettings.readDeeplApiKeyLayout.visibility = visibility
+                bindingSettings.readDeeplApiKeyHint.visibility = visibility
+            }
+
+            bindingSettings.readDeeplTranslationSwitch.isChecked = viewModel.mlUseDeepLTranslation
+            updateDeepLKeyVisibility(viewModel.mlUseDeepLTranslation)
+            bindingSettings.readDeeplTranslationSwitch.setOnCheckedChangeListener { _, isChecked ->
+                viewModel.mlUseDeepLTranslation = isChecked
+                updateDeepLKeyVisibility(isChecked)
+                if (isChecked) {
+                    bindingSettings.readOnlineTranslationSwitch.isChecked = false
+                    bindingSettings.readAiTranslationSwitch.isChecked = false
+                }
+            }
+
+            bindingSettings.readDeeplApiKey.setText(viewModel.mlDeepLApiKey)
+            bindingSettings.readDeeplApiKey.doAfterTextChanged { s ->
+                viewModel.mlDeepLApiKey = s?.toString()?.trim() ?: ""
             }
 
             bindingSettings.readAiTranslationSwitch.isChecked = viewModel.mlUseAiTranslation
@@ -1423,6 +1508,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 viewModel.mlUseAiTranslation = isChecked
                 if (isChecked) {
                     bindingSettings.readOnlineTranslationSwitch.isChecked = false
+                    bindingSettings.readDeeplTranslationSwitch.isChecked = false
                 }
             }
 
@@ -1550,7 +1636,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             // (timeout / model overloaded) and left a mix of translated and original text cached.
             bindingSettings.readApplyTranslation.setOnLongClickListener { view ->
                 if (view == null) return@setOnLongClickListener false
-                if (!viewModel.mlUseAiTranslation) return@setOnLongClickListener false
+                if (!viewModel.mlUseAiTranslation && !viewModel.mlUseDeepLTranslation) return@setOnLongClickListener false
                 showToast(R.string.retranslating_chapter)
                 viewModel.reTranslateChapter(viewModel.currentIndex)
                 bottomSheetDialog.dismiss()

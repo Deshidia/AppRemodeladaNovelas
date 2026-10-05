@@ -27,11 +27,13 @@ import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.databinding.FragmentDownloadsBinding
 import com.lagradost.quicknovel.databinding.SortBottomSheetBinding
 import com.lagradost.quicknovel.mvvm.observe
+import com.lagradost.quicknovel.TTSGlobalState
 import com.lagradost.quicknovel.ui.BaseFragment
 import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.UiImage
 import com.lagradost.quicknovel.ui.img
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
+import com.lagradost.quicknovel.ui.TTSMiniPlayerBinder
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
 import kotlinx.coroutines.launch
 
@@ -157,6 +159,9 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
 
     override fun onBindingCreated(binding: FragmentDownloadsBinding) {
         viewModel.loadAllData(true)
+        // Reproductor TTS entre el contenido y las categorías (en esta pantalla la tarjeta de la
+        // actividad principal está oculta)
+        TTSMiniPlayerBinder.bind(viewLifecycleOwner, TTSGlobalState.info, binding.ttsMiniPlayer)
         // activity?.fixPaddingStatusbar(binding.downloadToolbar)
         activity?.fixPaddingStatusbar(binding.downloadRoot)
         //viewModel = ViewModelProviders.of(activity!!).get(DownloadViewModel::class.java)

@@ -249,6 +249,9 @@
     <string name="sleep_format_stop">TTS остановится через %d мин</string>
     <string name="google_translate">Google перевод</string>
     <string name="online_translate">Онлайн перевод</string>
+    <string name="deepl_translate">Перевод DeepL</string>
+    <string name="deepl_api_key">API-ключ DeepL (необязательно)</string>
+    <string name="deepl_api_key_hint">Необязательно. Без ключа используется бесплатный веб-переводчик DeepL: аккаунт не нужен, но он ограничен, и если DeepL временно заблокирует соединение (ошибка 429), подождите несколько минут или смените сеть. С API-ключом (бесплатным или Pro; бесплатные заканчиваются на \":fx\") используется официальный API — он стабильнее.</string>
     <string name="start_chapter">Пропущенные главы</string>
     <string name="tts_speed">Темп TTS</string>
     <string name="tts_pitch">Тембр TTS</string>

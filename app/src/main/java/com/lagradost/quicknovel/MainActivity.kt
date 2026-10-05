@@ -16,6 +16,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.MediatorLiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -53,6 +55,7 @@ import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.mvvm.safe
 import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.providers.RedditProvider
+import com.lagradost.quicknovel.ui.TTSMiniPlayerBinder
 import com.lagradost.quicknovel.ui.LibraryCategoriesDialog
 import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.download.DownloadFragment
@@ -443,55 +446,22 @@ class MainActivity : AppCompatActivity() {
      */
     private fun setupTTSMiniPlayer() {
         val miniPlayer = binding?.ttsMiniPlayer ?: return
+        TTSMiniPlayerBinder.bind(this, ttsMiniPlayerInfo, miniPlayer)
+    }
 
-        miniPlayer.setOnClickListener {
-            TTSGlobalState.openReader(this)
-        }
-        binding?.ttsMiniPlayerPlayPause?.setOnClickListener {
-            TTSGlobalState.playPause()
-        }
-        binding?.ttsMiniPlayerForward?.setOnClickListener {
-            TTSGlobalState.skipForward()
-        }
-        binding?.ttsMiniPlayerBackward?.setOnClickListener {
-            TTSGlobalState.skipBackward()
-        }
-        binding?.ttsMiniPlayerClose?.setOnClickListener {
-            TTSGlobalState.stop()
-        }
+    /** true mientras se muestra la biblioteca: ahí el reproductor va dentro del propio fragment. */
+    private val ttsOnLibraryScreen = MutableLiveData(false)
 
-        observeNullable(TTSGlobalState.info) { info ->
-            val bind = binding ?: return@observeNullable
-            if (info == null) {
-                bind.ttsMiniPlayer.isVisible = false
-                return@observeNullable
-            }
-
-            // Al aparecer, entra deslizándose desde abajo en vez de saltar de golpe
-            val wasHidden = !bind.ttsMiniPlayer.isVisible
-            bind.ttsMiniPlayer.isVisible = true
-            if (wasHidden) {
-                bind.ttsMiniPlayer.alpha = 0f
-                bind.ttsMiniPlayer.translationY = 16 * resources.displayMetrics.density
-                bind.ttsMiniPlayer.animate().alpha(1f).translationY(0f).setDuration(220L).start()
-            }
-
-            bind.ttsMiniPlayerTitle.text = info.bookTitle
-            val chapter = info.chapterTitle?.asStringNull(this)
-            bind.ttsMiniPlayerSubtitle.text = chapter
-            bind.ttsMiniPlayerSubtitle.isVisible = !chapter.isNullOrBlank()
-
-            // Sin portada se ve el icono de relleno que hay debajo
-            bind.ttsMiniPlayerCover.setImageBitmap(info.poster)
-            bind.ttsMiniPlayerCover.isVisible = info.poster != null
-
-            bind.ttsMiniPlayerPlayPause.setImageResource(
-                if (info.status == TTSHelper.TTSStatus.IsRunning)
-                    R.drawable.ic_baseline_pause_24
-                else
-                    R.drawable.ic_baseline_play_arrow_24
-            )
+    /**
+     * Lo que muestra el reproductor de esta actividad: el estado global del TTS, salvo en la
+     * biblioteca, donde lo muestra el fragment encima de las categorías (esta tarjeta se oculta).
+     */
+    private val ttsMiniPlayerInfo = MediatorLiveData<TTSGlobalState.Info?>().apply {
+        fun refresh() {
+            value = if (ttsOnLibraryScreen.value == true) null else TTSGlobalState.info.value
         }
+        addSource(TTSGlobalState.info) { refresh() }
+        addSource(ttsOnLibraryScreen) { refresh() }
     }
 
     override fun onResume() {
@@ -584,6 +554,7 @@ class MainActivity : AppCompatActivity() {
         navController.addOnDestinationChangedListener { _: NavController, navDestination: NavDestination, bundle: Bundle? ->
             // Intercept search and add a query
             updateNavBar(navDestination)
+            ttsOnLibraryScreen.value = navDestination.id == R.id.navigation_download
             /*if (navDestination.matchDestination(R.id.navigation_search) && !nextSearchQuery.isNullOrBlank()) {
                 bundle?.apply {
                     this.putString(SearchFragment.SEARCH_QUERY, nextSearchQuery)

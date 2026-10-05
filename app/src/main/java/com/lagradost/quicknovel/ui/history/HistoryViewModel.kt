@@ -138,7 +138,7 @@ class HistoryViewModel : ViewModel() {
                         QuickStreamData(
                             QuickStreamMetaData(page.host, page.title, WebLinkProvider.NAME),
                             null,
-                            mutableListOf(ChapterData(page.title, url, null, null))
+                            WebLinkProvider.knownChain(url, page.title) // si ya se recorrió, la lista llega completa
                         )
                     )
                 }

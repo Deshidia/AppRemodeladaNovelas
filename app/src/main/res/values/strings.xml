@@ -266,6 +266,9 @@
     <string name="sleep_format_stop">TTS will stop in %d min</string>
     <string name="google_translate">Google translate</string>
     <string name="online_translate">Online translation</string>
+    <string name="deepl_translate">DeepL translation</string>
+    <string name="deepl_api_key">DeepL API Key (optional)</string>
+    <string name="deepl_api_key_hint">Optional. Without a key the free DeepL web translator is used: it needs no account but is limited, and if DeepL temporarily blocks your connection (error 429) wait a few minutes or switch networks. With an API key (free or Pro; free keys end in \":fx\") the official API is used, which is more stable.</string>
     <string name="ai_translate">Traducción con IA</string>
     <string name="gemini_api_key">Gemini API Key</string>
     <string name="gemini_model">Gemini Model</string>
@@ -354,4 +357,23 @@
     <string name="history_save_to_library">Save to library</string>
     <string name="library_categories_title">Set categories</string>
     <string name="library_categories_edit">Edit</string>
+
+    <!-- Replace tab -->
+    <string name="replace_tab">Replace</string>
+    <string name="replace_description">Replace words or phrases in the text of this novel. Fix mistakes before translating, or adapt terms after translating. Leave the second field empty to remove the term.</string>
+    <string name="replace_original_hint">Original term</string>
+    <string name="replace_replacement_hint">Replace with</string>
+    <string name="replace_when">When to replace</string>
+    <string name="replace_before">Before translating</string>
+    <string name="replace_after">After translating</string>
+    <string name="replace_timing_help">Before: the translator receives the corrected text (e.g. fix something that would confuse it). After: applied to the translated text (e.g. Rodrgo → Rodrigo). Without an active translation both are applied to the original text.</string>
+    <string name="replace_add">Add</string>
+    <string name="replace_save">Save changes</string>
+    <string name="replace_cancel">Cancel</string>
+    <string name="replace_empty">No replacements yet</string>
+    <string name="replace_saved_note">Changes apply the next time you open a chapter in the reader.</string>
+    <string name="replace_original_required">Enter the term to replace</string>
+    <string name="replace_same_text">Both texts are identical</string>
+    <string name="replace_delete">Delete replacement</string>
+    <string name="replace_item_empty_value">(remove)</string>
 </resources>

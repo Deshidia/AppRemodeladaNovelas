@@ -182,6 +182,41 @@
                     android:text="@string/online_translate" />
 
                 <com.google.android.material.checkbox.MaterialCheckBox
+                    android:id="@+id/read_deepl_translation_switch"
+                    style="@style/WhiteCheckmark"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/deepl_translate" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/read_deepl_api_key_layout"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:hint="@string/deepl_api_key"
+                    android:visibility="gone"
+                    app:endIconMode="password_toggle">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/read_deepl_api_key"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPassword"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/read_deepl_api_key_hint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:alpha="0.7"
+                    android:text="@string/deepl_api_key_hint"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <com.google.android.material.checkbox.MaterialCheckBox
                     android:id="@+id/read_ai_translation_switch"
                     style="@style/WhiteCheckmark"
                     android:layout_width="match_parent"

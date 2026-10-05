@@ -52,6 +52,8 @@ import com.lagradost.quicknovel.ui.download.SortingMethod
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ResultCached
+import com.lagradost.quicknovel.util.TextReplacement
+import com.lagradost.quicknovel.util.TextReplacements
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -223,6 +225,39 @@ class ResultViewModel : ViewModel() {
 
     val chapters: MutableLiveData<List<ChapterData>?> =
         MutableLiveData<List<ChapterData>?>()
+
+    /** Reglas de la pestaña "Sustituir" de esta novela. */
+    val replacements: MutableLiveData<List<TextReplacement>> =
+        MutableLiveData<List<TextReplacement>>(emptyList())
+    private var replacementsNovel: String? = null
+
+    fun loadReplacements(novelName: String) {
+        if (replacementsNovel == novelName) return
+        replacementsNovel = novelName
+        replacements.postValue(TextReplacements.get(novelName))
+    }
+
+    /** Añade una regla, o reemplaza la de [editIndex] si se está editando. */
+    fun saveReplacement(rule: TextReplacement, editIndex: Int?) {
+        val novel = replacementsNovel ?: return
+        val list = (replacements.value ?: emptyList()).toMutableList()
+        if (editIndex != null && editIndex in list.indices) {
+            list[editIndex] = rule
+        } else {
+            list.add(rule)
+        }
+        TextReplacements.set(novel, list)
+        replacements.postValue(list)
+    }
+
+    fun deleteReplacement(index: Int) {
+        val novel = replacementsNovel ?: return
+        val list = (replacements.value ?: emptyList()).toMutableList()
+        if (index !in list.indices) return
+        list.removeAt(index)
+        TextReplacements.set(novel, list)
+        replacements.postValue(list)
+    }
 
     val reviews: MutableLiveData<Resource<ArrayList<UserReview>>> by lazy {
         MutableLiveData<Resource<ArrayList<UserReview>>>()
