@@ -71,7 +71,11 @@ import com.lagradost.quicknovel.util.CoilImagesPlugin.CoilStore
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.runOnMainThread
 import com.lagradost.quicknovel.util.GoogleTranslateOnline
+import com.lagradost.quicknovel.util.DeepLTranslate
 import com.lagradost.quicknovel.util.GeminiTranslate
+import com.lagradost.quicknovel.util.ReplaceTiming
+import com.lagradost.quicknovel.util.TextReplacement
+import com.lagradost.quicknovel.util.TextReplacements
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.safefile.closeQuietly
 import io.noties.markwon.AbstractMarkwonPlugin
@@ -529,7 +533,8 @@ class ReadActivityViewModel : ViewModel() {
             from = mlFromLanguage,
             to = mlToLanguage,
             useOnlineTranslation = mlUseOnlineTransaltion,
-            useAiTranslation = mlUseAiTranslation
+            useAiTranslation = mlUseAiTranslation,
+            useDeepLTranslation = mlUseDeepLTranslation
         )
         set(value) = setKey(EPUB_CURRENT_ML, book.title(), value)
 
@@ -1035,6 +1040,56 @@ class ReadActivityViewModel : ViewModel() {
     }
 
 
+    /**
+     * Sin traducción activa lo que se muestra es el texto original, así que las sustituciones
+     * (tanto "antes" como "después") se aplican directamente sobre él, conservando el formato.
+     * Devuelve null si no hay nada que cambiar.
+     */
+    private fun applyReplacementsWithoutTranslation(
+        spans: ArrayList<TextSpan>,
+        rules: List<TextReplacement>
+    ): Pair<Spanned, ArrayList<TextSpan>>? {
+        if (rules.isEmpty()) return null
+        var changed = false
+        val builder = SpannableStringBuilder()
+        val out = ArrayList<TextSpan>()
+        spans.forEach { span ->
+            val hasImage = span.text.getSpans<AsyncDrawableSpan>().isNotEmpty()
+            val finalText = if (hasImage) {
+                span.text
+            } else {
+                TextReplacements.applyKeepingFormat(span.text, rules).also {
+                    if (it !== span.text) changed = true
+                }
+            }
+            val start = builder.length
+            builder.append(finalText)
+            val end = builder.length
+            builder.append('\n')
+            out.add(TextSpan(finalText, start, end, span.index, span.innerIndex))
+        }
+        return if (changed) builder to out else null
+    }
+
+    /**
+     * Una sustitución "antes" puede dejar un párrafo vacío; los traductores trabajan por
+     * párrafos y un hueco podría desalinear las líneas, así que esos párrafos no se envían.
+     */
+    private suspend fun translateSkippingBlank(
+        lines: List<String>,
+        skipBlank: Boolean,
+        translateFn: suspend (List<String>) -> List<String>
+    ): List<String> {
+        if (!skipBlank) return translateFn(lines)
+        val indices = lines.indices.filter { lines[it].isNotBlank() }
+        if (indices.size == lines.size) return translateFn(lines)
+        if (indices.isEmpty()) return lines
+        val translated = translateFn(indices.map { lines[it] })
+        val out = ArrayList(lines)
+        indices.forEachIndexed { k, i -> translated.getOrNull(k)?.let { out[i] = it } }
+        return out
+    }
+
     @Throws(MLException::class)
     private suspend fun translate(
         text: Spanned,
@@ -1044,7 +1099,25 @@ class ReadActivityViewModel : ViewModel() {
     ): Pair<Spanned, ArrayList<TextSpan>> {
         try {
             val currentSettings = mlSettings
-            if (spans.isEmpty() || currentSettings.isInvalid()) return text to spans
+
+            // Sustituciones de la ficha de la novela (pestaña "Sustituir")
+            val replacementRules = TextReplacements.get(book.title())
+            val beforeRules =
+                TextReplacements.forTiming(replacementRules, ReplaceTiming.BEFORE_TRANSLATION)
+            val afterRules =
+                TextReplacements.forTiming(replacementRules, ReplaceTiming.AFTER_TRANSLATION)
+
+            if (spans.isEmpty()) return text to spans
+            if (currentSettings.isInvalid()) {
+                return applyReplacementsWithoutTranslation(spans, beforeRules + afterRules)
+                    ?: (text to spans)
+            }
+
+            // lo que recibe el traductor (con las sustituciones "antes" ya aplicadas)
+            val sourceLines = spans.map {
+                TextReplacements.apply(it.text.toString(), beforeRules)
+            }
+
             val textHash = hashString(
                 text.trim().toString().toByteArray()
             )
@@ -1053,9 +1126,10 @@ class ReadActivityViewModel : ViewModel() {
             val filePrefix =
                 "ml_${textHash}.${currentSettings.from}_to_${currentSettings.to}.${
                 if (currentSettings.useOnlineTranslation) "online" 
+                else if (currentSettings.useDeepLTranslation) "deepl"
                 else if (currentSettings.useAiTranslation) "ai_${mlAiModel.replace(Regex("[^a-zA-Z0-9]"), "_")}_${hashString(mlAiPrompt.toByteArray()).take(8)}_${mlAiThinkingLevel}_${mlAiTemperature}_${mlAiTopP}_${mlAiTopK}"
                 else "offline"
-            }"
+            }${if (beforeRules.isEmpty()) "" else ".r${TextReplacements.hash(beforeRules)}"}"
 
             // read from cache if it exists
             // we assume that parseTextToSpans is equivalent from restoring from the builder
@@ -1066,7 +1140,10 @@ class ReadActivityViewModel : ViewModel() {
                         val cache = File(dir, "$filePrefix.txt")
                         if (cache.exists()) {
                             Log.i(TAG, "Cache exists for $filePrefix")
-                            val lines = cache.readLines()
+                            // la caché guarda la traducción "pura"; "después" se aplica al leerla
+                            val lines = cache.readLines().map {
+                                TextReplacements.apply(it, afterRules)
+                            }
                             val (builder, out) = getFinalTranslatedText(spans, lines)
                             return@safe builder to out
                         }
@@ -1081,55 +1158,87 @@ class ReadActivityViewModel : ViewModel() {
 
             // --- Online mode ---
             if (currentSettings.useOnlineTranslation) {
-                translatedList = GoogleTranslateOnline.onlineTranslate(
-                        spans.map { it.text.toString() },
+                translatedList = translateSkippingBlank(
+                    sourceLines,
+                    beforeRules.isNotEmpty()
+                ) { lines ->
+                    GoogleTranslateOnline.onlineTranslate(
+                        lines,
                         currentSettings.from,
                         currentSettings.to
-                    ){ progress, total ->
+                    ) { progress, total ->
                         loading.invoke(Triple(spans[0].index, progress, total))
                     }
+                }
 
             }
 
-            // --- AI mode ---
-            else if (currentSettings.useAiTranslation) {
-                translatedList = GeminiTranslate.geminiTranslate(
-                    spans.map { it.text.toString() },
-                    mlAiApiKey,
-                    mlAiModel,
+            // --- DeepL mode (ya omite los párrafos vacíos y devuelve el mismo tamaño) ---
+            else if (currentSettings.useDeepLTranslation) {
+                translatedList = DeepLTranslate.deeplTranslate(
+                    sourceLines,
+                    mlDeepLApiKey,
                     currentSettings.from,
-                    currentSettings.to,
-                    mlAiPrompt,
-                    thinkingLevel = GeminiThinkingLevel.fromName(mlAiThinkingLevel),
-                    temperature = mlAiTemperature,
-                    topP = mlAiTopP,
-                    topK = mlAiTopK,
-                    maxRequestsPerMinute = mlAiMaxRequestsPerMinute,
-                    backupModel = mlAiBackupModel,
-                    maxCharsPerRequest = mlAiMaxCharsPerRequest
+                    currentSettings.to
                 ) { progress, total ->
                     loading.invoke(Triple(spans[0].index, progress, total))
                 }
             }
 
+            // --- AI mode ---
+            else if (currentSettings.useAiTranslation) {
+                translatedList = translateSkippingBlank(
+                    sourceLines,
+                    beforeRules.isNotEmpty()
+                ) { lines ->
+                    GeminiTranslate.geminiTranslate(
+                        lines,
+                        mlAiApiKey,
+                        mlAiModel,
+                        currentSettings.from,
+                        currentSettings.to,
+                        mlAiPrompt,
+                        thinkingLevel = GeminiThinkingLevel.fromName(mlAiThinkingLevel),
+                        temperature = mlAiTemperature,
+                        topP = mlAiTopP,
+                        topK = mlAiTopK,
+                        maxRequestsPerMinute = mlAiMaxRequestsPerMinute,
+                        backupModel = mlAiBackupModel,
+                        maxCharsPerRequest = mlAiMaxCharsPerRequest
+                    ) { progress, total ->
+                        loading.invoke(Triple(spans[0].index, progress, total))
+                    }
+                }
+            }
+
             // --- Offline mode ---
             else {
-                val translator = mlTranslator ?: return text to spans
+                val translator = mlTranslator
+                    ?: return applyReplacementsWithoutTranslation(spans, beforeRules + afterRules)
+                        ?: (text to spans)
                 translatedList = spans.mapIndexed { i,  span ->
                     loading.invoke(Triple(span.index, i, spans.size))
+                    val line = sourceLines[i]
+                    if (line.isBlank()) return@mapIndexed line
                     try {
-                        Tasks.await(translator.translate(span.text.toString()))
+                        Tasks.await(translator.translate(line))
                     } catch (t: ExecutionException) {
                         throw t.cause ?: t
                     }
                 }
             }
 
+            // traducción "pura" (sin sustituciones "después"): es lo que se guarda en caché
             val (builder, out) = getFinalTranslatedText(spans, translatedList)
 
             // Protection: if translation is same as original, don't cache
+            // (también si es igual al texto ya corregido por las sustituciones "antes",
+            // que es lo que devuelven los traductores cuando fallan)
             val resultText = builder.toString()
+            val sourceText = if (beforeRules.isEmpty()) null
+            else getFinalTranslatedText(spans, sourceLines).first.toString()
             val isSameAsOriginal = resultText.trim() == text.toString().trim()
+                    || (sourceText != null && resultText.trim() == sourceText.trim())
 
             if (!isSameAsOriginal) {
                 // atomically write the file by rename
@@ -1143,6 +1252,12 @@ class ReadActivityViewModel : ViewModel() {
                 }
             }
 
+            if (afterRules.isNotEmpty()) {
+                return getFinalTranslatedText(
+                    spans,
+                    translatedList.map { TextReplacements.apply(it, afterRules) }
+                )
+            }
             return builder to out
         } catch (t: Throwable) {
             throw MLException(t)
@@ -1151,8 +1266,8 @@ class ReadActivityViewModel : ViewModel() {
 
     @Throws(MLException::class)
     suspend fun requireMLDownload(): Boolean {
-        val settings = MLSettings(from = mlFromLanguage, to = mlToLanguage, mlUseOnlineTransaltion, mlUseAiTranslation)
-        if (settings.isInvalid() || mlUseOnlineTransaltion || mlUseAiTranslation) {
+        val settings = MLSettings(from = mlFromLanguage, to = mlToLanguage, mlUseOnlineTransaltion, mlUseAiTranslation, mlUseDeepLTranslation)
+        if (settings.isInvalid() || mlUseOnlineTransaltion || mlUseAiTranslation || mlUseDeepLTranslation) {
             return false
         }
         val modelManager = RemoteModelManager.getInstance()
@@ -1174,7 +1289,7 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun applyMLSettings(allowDownload: Boolean) = ioSafe {
-        val settings = MLSettings(from = mlFromLanguage, to = mlToLanguage, mlUseOnlineTransaltion, mlUseAiTranslation)
+        val settings = MLSettings(from = mlFromLanguage, to = mlToLanguage, mlUseOnlineTransaltion, mlUseAiTranslation, mlUseDeepLTranslation)
         if (settings.isValid() && allowDownload && safeAsync { requireMLDownload() } == true) {
             _loadingStatus.postValue(Resource.Loading("Downloading language"))
         }
@@ -1259,7 +1374,7 @@ class ReadActivityViewModel : ViewModel() {
             mlTranslator?.closeQuietly()
             mlTranslator = null
 
-            if (settings.isInvalid() || settings.useOnlineTranslation || settings.useAiTranslation) {
+            if (settings.isInvalid() || settings.useOnlineTranslation || settings.useAiTranslation || settings.useDeepLTranslation) {
                 mlSettings = settings
                 return
             }
@@ -2082,6 +2197,22 @@ class ReadActivityViewModel : ViewModel() {
         mlUseAiTranslationLive
     )
 
+    val mlUseDeepLTranslationLive: MutableLiveData<Boolean> = MutableLiveData(false)
+    var mlUseDeepLTranslation by PreferenceDelegateLiveView(
+        EPUB_ML_USEDEEPLTRANSLATION,
+        false,
+        Boolean::class,
+        mlUseDeepLTranslationLive
+    )
+
+    val mlDeepLApiKeyLive: MutableLiveData<String> = MutableLiveData("")
+    var mlDeepLApiKey by PreferenceDelegateLiveView(
+        EPUB_ML_DEEPL_API_KEY,
+        "",
+        String::class,
+        mlDeepLApiKeyLive
+    )
+
     val mlAiApiKeyLive: MutableLiveData<String> = MutableLiveData("")
     var mlAiApiKey by PreferenceDelegateLiveView(
         EPUB_ML_AI_API_KEY,
@@ -2190,7 +2321,9 @@ class ReadActivityViewModel : ViewModel() {
         @JsonProperty("useOnlineTranslation")
         val useOnlineTranslation: Boolean = false,
         @JsonProperty("useAiTranslation")
-        val useAiTranslation: Boolean = false
+        val useAiTranslation: Boolean = false,
+        @JsonProperty("useDeepLTranslation")
+        val useDeepLTranslation: Boolean = false
     ) {
         companion object {
             val map = mapOf(
@@ -2275,7 +2408,7 @@ class ReadActivityViewModel : ViewModel() {
 
             val all = TranslateLanguage.getAllLanguages()
 
-            if (useOnlineTranslation || useAiTranslation) return true
+            if (useOnlineTranslation || useAiTranslation || useDeepLTranslation) return true
 
             if (!all.contains(to)) {
                 // no translation

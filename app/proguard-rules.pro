@@ -31,7 +31,3 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
-# Reglas "Sustituir" de la ficha de la novela (se guardan como JSON con Jackson)
--keep class com.lagradost.quicknovel.util.TextReplacement { *; }
--keep class com.lagradost.quicknovel.util.NovelReplacementRules { *; }
--keep class com.lagradost.quicknovel.util.ReplaceTiming { *; }

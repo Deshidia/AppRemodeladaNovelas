@@ -70,8 +70,6 @@ const val EPUB_CURRENT_POSITION_SCROLL_CHAR: String = "reader_epub_position_scro
 const val EPUB_CURRENT_ML: String = "reader_epub_ml"
 const val EPUB_CURRENT_POSITION_READ_AT: String = "reader_epub_position_read"
 const val EPUB_CURRENT_POSITION_CHAPTER: String = "reader_epub_position_chapter"
-// Reglas "Sustituir" de cada novela (clave = nombre de la novela, igual que EPUB_CURRENT_ML).
-const val NOVEL_TEXT_REPLACEMENTS: String = "novel_text_replacements"
 const val RESULT_BOOKMARK: String = "result_bookmarked"
 const val RESULT_BOOKMARK_STATE: String = "result_bookmarked_state"
 // Listas de la biblioteca a las que pertenece cada novela (puede ser más de una).

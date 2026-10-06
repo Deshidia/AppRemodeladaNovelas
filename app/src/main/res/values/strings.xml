@@ -357,23 +357,4 @@
     <string name="history_save_to_library">Save to library</string>
     <string name="library_categories_title">Set categories</string>
     <string name="library_categories_edit">Edit</string>
-
-    <!-- Replace tab -->
-    <string name="replace_tab">Replace</string>
-    <string name="replace_description">Replace words or phrases in the text of this novel. Fix mistakes before translating, or adapt terms after translating. Leave the second field empty to remove the term.</string>
-    <string name="replace_original_hint">Original term</string>
-    <string name="replace_replacement_hint">Replace with</string>
-    <string name="replace_when">When to replace</string>
-    <string name="replace_before">Before translating</string>
-    <string name="replace_after">After translating</string>
-    <string name="replace_timing_help">Before: the translator receives the corrected text (e.g. fix something that would confuse it). After: applied to the translated text (e.g. Rodrgo → Rodrigo). Without an active translation both are applied to the original text.</string>
-    <string name="replace_add">Add</string>
-    <string name="replace_save">Save changes</string>
-    <string name="replace_cancel">Cancel</string>
-    <string name="replace_empty">No replacements yet</string>
-    <string name="replace_saved_note">Changes apply the next time you open a chapter in the reader.</string>
-    <string name="replace_original_required">Enter the term to replace</string>
-    <string name="replace_same_text">Both texts are identical</string>
-    <string name="replace_delete">Delete replacement</string>
-    <string name="replace_item_empty_value">(remove)</string>
 </resources>
