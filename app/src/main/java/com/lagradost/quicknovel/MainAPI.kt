@@ -20,6 +20,7 @@ abstract class MainAPI {
     open val mainUrl = "NONE"
 
     open val lang = "en" // ISO_639_1 check SubtitleHelper
+    open val chapterLang: String? get() = lang.takeIf { it != "es" }
 
     open val usesCloudFlareKiller = false
     val app get() = if(!usesCloudFlareKiller) MainActivity.app else MainActivity.appWithInterceptor
@@ -384,7 +385,7 @@ suspend fun MainAPI.newEpubResponse(
 }
 
 data class ChapterData(
-    val name: String,
+    var name: String,
     val url: String,
     var dateOfRelease: String? = null,
     val views: Int? = null,

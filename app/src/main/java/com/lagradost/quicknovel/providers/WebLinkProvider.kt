@@ -30,6 +30,7 @@ class WebLinkProvider : MainAPI() {
     // "es" evita que APIRepository.load traduzca el nombre de la ficha: el id (generateId) depende del nombre
     // y tiene que ser el mismo que el de la tarjeta guardada en el historial.
     override val lang = "es"
+    override val chapterLang: String? = "auto"
 
     // Cloudflare solo se resuelve (WebView) cuando la respuesta es realmente un desafío; en webs normales no cuesta nada
     override val usesCloudFlareKiller = true
@@ -628,6 +629,28 @@ class WebLinkProvider : MainAPI() {
         private fun extractContent(doc: Document): String {
             doc.select(junkSelectors).remove()
             val main = findMainElement(doc)
+
+            // Muchas webs dejan las ilustraciones en src relativo o en atributos de carga diferida.
+            // Markwon/Coil recibe la URL sin el contexto de Jsoup, por lo que aquí la convertimos
+            // a absoluta antes de devolver el HTML del capítulo.
+            for (img in main.select("img")) {
+                val sourceAttribute = listOf(
+                    "src", "data-src", "data-lazy-src", "data-original", "data-url"
+                ).firstOrNull { attribute ->
+                    val value = img.attr(attribute).trim()
+                    value.isNotEmpty() && !value.startsWith("data:", ignoreCase = true)
+                }
+                if (sourceAttribute != null) {
+                    val absolute = img.absUrl(sourceAttribute)
+                    if (absolute.isNotBlank()) {
+                        img.attr("src", absolute)
+                    }
+                }
+            }
+
+            // Si hay imágenes no reducimos el contenido a bloques con texto: así no se pierden
+            // ilustraciones en <p><img ...></p>, <figure> o bloques sin texto.
+            if (main.select("img").isNotEmpty()) return main.html()
 
             val blocks = main.select("h1, h2, h3, h4, p")
                 .filter { it.text().isNotBlank() }

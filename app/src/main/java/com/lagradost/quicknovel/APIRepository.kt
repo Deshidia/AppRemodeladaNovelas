@@ -88,12 +88,21 @@ class APIRepository(val api: MainAPI) {
                 }
 
                 api.load(fixedUrl)?.also { response ->
+                    val streamResponse = response as? StreamResponse
+                    val chapterNames = streamResponse?.data?.map { it.name }.orEmpty()
+                    val chapterLang = api.chapterLang
+                    val translateChaptersWithMetadata =
+                        api.lang != "es" && chapterLang == api.lang && chapterNames.isNotEmpty()
+
                     if (api.lang != "es") {
                         try {
                             val toTranslate = mutableListOf<String>()
                             toTranslate.add(response.name)
                             response.synopsis?.let { toTranslate.add(it) }
                             response.tags?.let { toTranslate.addAll(it) }
+                            if (translateChaptersWithMetadata) {
+                                toTranslate.addAll(chapterNames)
+                            }
 
                             val translated = GoogleTranslateOnline.onlineTranslate(
                                 toTranslate,
@@ -113,6 +122,33 @@ class APIRepository(val api: MainAPI) {
                                         newTags.add(translated[index++])
                                     }
                                     response.tags = newTags
+                                }
+                                if (translateChaptersWithMetadata) {
+                                    streamResponse?.data?.forEach { chapter ->
+                                        chapter.name = translated[index++]
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            logError(e)
+                        }
+                    }
+
+                    // Los enlaces abiertos desde la web conservan lang="es" para no cambiar el
+                    // nombre de la ficha ni romper la clave usada por el historial. Sus capítulos
+                    // se traducen aparte con detección automática del idioma.
+                    if (chapterNames.isNotEmpty() && chapterLang != null &&
+                        (api.lang == "es" || chapterLang != api.lang)
+                    ) {
+                        try {
+                            val translated = GoogleTranslateOnline.onlineTranslate(
+                                chapterNames,
+                                chapterLang,
+                                "es"
+                            )
+                            if (translated.size == chapterNames.size) {
+                                streamResponse?.data?.forEachIndexed { index, chapter ->
+                                    chapter.name = translated[index]
                                 }
                             }
                         } catch (e: Exception) {
