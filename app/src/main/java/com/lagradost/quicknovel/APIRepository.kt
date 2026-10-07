@@ -5,6 +5,13 @@ import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.mvvm.safeApiCall
 import com.lagradost.quicknovel.util.Coroutines.threadSafeListOf
 import com.lagradost.quicknovel.util.GoogleTranslateOnline
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 
 data class OnGoingSearch(
@@ -52,6 +59,15 @@ class APIRepository(val api: MainAPI) {
 
         // 10min cache time should be plenty per session without fucking up anything for the user with outdated data
         const val cacheTimeSec: Int = 60 * 10
+
+        // Peticiones simultáneas a Google Translate. Los metadatos son 1-2 trozos; los nombres de
+        // capítulo pueden ser decenas, por eso se hacen en paralelo (y fuera de la ficha).
+        private const val METADATA_TRANSLATION_PARALLELISM = 3
+        private const val CHAPTER_TRANSLATION_PARALLELISM = 4
+
+        // Scope de aplicación: la traducción de capítulos sigue aunque se cierre la ficha, así
+        // queda ya traducida en la caché si se vuelve a abrir.
+        private val translationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 
     val name: String get() = api.name
@@ -67,8 +83,18 @@ class APIRepository(val api: MainAPI) {
     val tags: List<Pair<String, String>> get() = api.tags
 
 
-    suspend fun load(url: String, allowCache: Boolean = true): Resource<LoadResponse> {
-        return safeApiCall {
+    /**
+     * @param awaitChapterTranslation si es `false`, no se espera a que se traduzcan los nombres de
+     * capítulo: la ficha se devuelve en cuanto está lista y la traducción continúa en segundo plano
+     * (ver [StreamResponse.chapterNamesTranslation]). Con `true` (por defecto) el resultado ya
+     * trae los capítulos traducidos, como antes.
+     */
+    suspend fun load(
+        url: String,
+        allowCache: Boolean = true,
+        awaitChapterTranslation: Boolean = true,
+    ): Resource<LoadResponse> {
+        val result = safeApiCall {
             try {
                 if (api.hasRateLimit) {
                     api.rateLimitMutex.lock()
@@ -88,72 +114,13 @@ class APIRepository(val api: MainAPI) {
                 }
 
                 api.load(fixedUrl)?.also { response ->
-                    val streamResponse = response as? StreamResponse
-                    val chapterNames = streamResponse?.data?.map { it.name }.orEmpty()
-                    val chapterLang = api.chapterLang
-                    val translateChaptersWithMetadata =
-                        api.lang != "es" && chapterLang == api.lang && chapterNames.isNotEmpty()
+                    // Título, sinopsis y etiquetas: una petición pequeña y necesaria ya, porque el
+                    // título traducido forma parte del id de la novela.
+                    translateMetadata(response)
 
-                    if (api.lang != "es") {
-                        try {
-                            val toTranslate = mutableListOf<String>()
-                            toTranslate.add(response.name)
-                            response.synopsis?.let { toTranslate.add(it) }
-                            response.tags?.let { toTranslate.addAll(it) }
-                            if (translateChaptersWithMetadata) {
-                                toTranslate.addAll(chapterNames)
-                            }
-
-                            val translated = GoogleTranslateOnline.onlineTranslate(
-                                toTranslate,
-                                api.lang,
-                                "es"
-                            )
-
-                            if (translated.size == toTranslate.size) {
-                                var index = 0
-                                response.name = translated[index++]
-                                if (response.synopsis != null) {
-                                    response.synopsis = translated[index++]
-                                }
-                                if (response.tags != null) {
-                                    val newTags = mutableListOf<String>()
-                                    repeat(response.tags!!.size) {
-                                        newTags.add(translated[index++])
-                                    }
-                                    response.tags = newTags
-                                }
-                                if (translateChaptersWithMetadata) {
-                                    streamResponse?.data?.forEach { chapter ->
-                                        chapter.name = translated[index++]
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            logError(e)
-                        }
-                    }
-
-                    // Los enlaces abiertos desde la web conservan lang="es" para no cambiar el
-                    // nombre de la ficha ni romper la clave usada por el historial. Sus capítulos
-                    // se traducen aparte con detección automática del idioma.
-                    if (chapterNames.isNotEmpty() && chapterLang != null &&
-                        (api.lang == "es" || chapterLang != api.lang)
-                    ) {
-                        try {
-                            val translated = GoogleTranslateOnline.onlineTranslate(
-                                chapterNames,
-                                chapterLang,
-                                "es"
-                            )
-                            if (translated.size == chapterNames.size) {
-                                streamResponse?.data?.forEachIndexed { index, chapter ->
-                                    chapter.name = translated[index]
-                                }
-                            }
-                        } catch (e: Exception) {
-                            logError(e)
-                        }
+                    // Los nombres de capítulo pueden ser miles: se traducen aparte, sin bloquear.
+                    (response as? StreamResponse)?.let { stream ->
+                        stream.chapterNamesTranslation = startChapterTranslation(stream)
                     }
 
                     // Remove all blank tags as early as possible
@@ -173,6 +140,91 @@ class APIRepository(val api: MainAPI) {
                 if (api.hasRateLimit) {
                     api.rateLimitMutex.unlock()
                 }
+            }
+        }
+
+        if (awaitChapterTranslation && result is Resource.Success) {
+            (result.value as? StreamResponse)?.chapterNamesTranslation?.await()
+        }
+        return result
+    }
+
+    /** Traduce título, sinopsis y etiquetas al español (si la fuente no está ya en español). */
+    private suspend fun translateMetadata(response: LoadResponse) {
+        if (api.lang == "es") return
+        try {
+            val toTranslate = mutableListOf<String>()
+            toTranslate.add(response.name)
+            response.synopsis?.let { toTranslate.add(it) }
+            val tags = response.tags
+            if (tags != null) toTranslate.addAll(tags)
+
+            val translated = GoogleTranslateOnline.onlineTranslate(
+                toTranslate,
+                api.lang,
+                "es",
+                parallelism = METADATA_TRANSLATION_PARALLELISM
+            )
+
+            if (translated.size == toTranslate.size) {
+                var index = 0
+                response.name = translated[index++]
+                if (response.synopsis != null) {
+                    response.synopsis = translated[index++]
+                }
+                if (tags != null) {
+                    val newTags = mutableListOf<String>()
+                    repeat(tags.size) {
+                        newTags.add(translated[index++])
+                    }
+                    response.tags = newTags
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logError(e)
+        }
+    }
+
+    /**
+     * Lanza en segundo plano la traducción de los nombres de capítulo al español.
+     *
+     * Los nombres se aplican en el hilo principal, que es donde la ficha usa esa lista, de una vez
+     * y solo si se tradujeron todos (si no, se queda el original). Devuelve null si no hay nada
+     * que traducir.
+     *
+     * Los enlaces abiertos desde la web conservan lang="es" para no cambiar el nombre de la ficha
+     * ni romper la clave usada por el historial; sus capítulos se traducen aparte con detección
+     * automática del idioma (chapterLang = "auto").
+     */
+    private fun startChapterTranslation(response: StreamResponse): Deferred<Boolean>? {
+        val chapterLang = api.chapterLang ?: return null
+        val chapters = response.data
+        if (chapters.isEmpty()) return null
+        val names = chapters.map { it.name }
+
+        return translationScope.async {
+            try {
+                val translated = GoogleTranslateOnline.onlineTranslate(
+                    names,
+                    chapterLang,
+                    "es",
+                    parallelism = CHAPTER_TRANSLATION_PARALLELISM
+                )
+                if (translated.size != chapters.size) return@async false
+
+                withContext(Dispatchers.Main) {
+                    chapters.forEachIndexed { index, chapter ->
+                        chapter.name = translated[index]
+                    }
+                }
+                true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logError(e)
+                false
             }
         }
     }

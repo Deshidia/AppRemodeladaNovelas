@@ -15,7 +15,7 @@ class BlurTransformation(
     private val scale: Float = 0.5f
 ) : Transformation() {
 
-    override val cacheKey: String = "${javaClass.name}-$radius"
+    override val cacheKey: String = "${javaClass.name}-$radius-$scale"
 
     override suspend fun transform(
         input: Bitmap,
@@ -24,10 +24,10 @@ class BlurTransformation(
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        return other is BlurTransformation && radius == other.radius
+        return other is BlurTransformation && radius == other.radius && scale == other.scale
     }
 
-    override fun hashCode(): Int = radius.hashCode()
+    override fun hashCode(): Int = 31 * radius.hashCode() + scale.hashCode()
 
 }
 
@@ -36,8 +36,8 @@ private suspend fun Bitmap.blur(
     radius: Int
 ): Bitmap? = withContext(Dispatchers.IO) {
     var sentBitmap = this@blur
-    val width = (sentBitmap.width * scale).roundToInt()
-    val height = (sentBitmap.height * scale).roundToInt()
+    val width = (sentBitmap.width * scale).roundToInt().coerceAtLeast(1)
+    val height = (sentBitmap.height * scale).roundToInt().coerceAtLeast(1)
     sentBitmap = sentBitmap.scale(width, height, false)
     val bitmap = sentBitmap.copy(sentBitmap.config ?: return@withContext null, true)
     if (radius < 1) {

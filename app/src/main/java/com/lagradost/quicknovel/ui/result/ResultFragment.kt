@@ -228,6 +228,21 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
     }
 
+    /**
+     * Los nombres de capítulo se traducen en segundo plano y se cambian in place cuando acaba:
+     * se repinta la lista y el texto del último capítulo, que ya se habían dibujado.
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    private fun refreshChapterNames(binding: FragmentResultBinding) {
+        (binding.chapterList.adapter as? ChapterAdapter)?.notifyDataSetChanged()
+
+        val res = (viewModel.loadResponse.value as? Resource.Success)?.value as? StreamResponse
+        res?.data?.lastOrNull()?.let { last ->
+            binding.resultTotalChapters.text =
+                getString(R.string.latest_format).format(last.name)
+        }
+    }
+
     private fun updateScrollHeight() {
         val binding = binding ?: return
         val displayMetrics = context?.resources?.displayMetrics ?: return
@@ -301,7 +316,10 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     }
 
                     resultPoster.setImage(res.image)
-                    resultPosterBlur.setImage(res.image, radius = 100, sample = 3)
+                    // El desenfoque se calcula sobre la imagen reducida a 1/sample (antes se ampliaba x3 con
+                    // radio 100, lo que gastaba cientos de MB y segundos). Radio 11 sobre 1/3 de tamaño
+                    // da el mismo aspecto que el radio 100 sobre x3 de antes.
+                    resultPosterBlur.setImage(res.image, radius = 11, sample = 3)
 
                     resultTitle.text = res.name
                     var titleExpanded = false
@@ -813,6 +831,10 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     adapter.submitList(chapters)
                 }
             }
+        }
+
+        observe(viewModel.chapterNamesChanged) {
+            refreshChapterNames(binding)
         }
 
         binding.chapterSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {

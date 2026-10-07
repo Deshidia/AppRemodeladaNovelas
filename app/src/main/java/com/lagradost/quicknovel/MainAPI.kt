@@ -2,6 +2,7 @@ package com.lagradost.quicknovel
 
 import androidx.annotation.StringRes
 import androidx.annotation.WorkerThread
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.lagradost.nicehttp.NiceResponse
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.MainActivity.Companion.app
@@ -9,6 +10,7 @@ import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.UiImage
 import com.lagradost.quicknovel.ui.img
 import com.lagradost.quicknovel.util.DefaultImagesHeaders
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.sync.Mutex
 import org.jsoup.Jsoup
 
@@ -286,7 +288,15 @@ data class StreamResponse(
     override var posterHeaders: Map<String, String>? = null,
     var nextChapter: ChapterData? = null,
     override var related: List<SearchResponse>? = null
-) : LoadResponse
+) : LoadResponse {
+    /**
+     * Traducción de los nombres de capítulo, que [APIRepository.load] hace en segundo plano
+     * (modificando `ChapterData.name` en el hilo principal). Vale `true` al terminar si se tradujo.
+     * Null si no hay nada que traducir.
+     */
+    @get:JsonIgnore
+    var chapterNamesTranslation: Deferred<Boolean>? = null
+}
 
 suspend fun MainAPI.newStreamResponse(
     name: String,

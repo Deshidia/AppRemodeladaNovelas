@@ -6,7 +6,12 @@ import com.lagradost.quicknovel.MainActivity
 import kotlin.math.pow
 import android.net.Uri
 import com.lagradost.quicknovel.mvvm.logError
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonFormat(shape = JsonFormat.Shape.ARRAY)
@@ -32,18 +37,38 @@ object GoogleTranslateOnline {
     private const val charsLimit = 2000
     private val paragraphsSeparatorRegex = Regex("\\n?XQZX\\n?")
 
+    /**
+     * @param parallelism número máximo de peticiones simultáneas. Con 1 (por defecto) los trozos se
+     * traducen uno tras otro, como siempre; con más, se lanzan a la vez y el orden del resultado
+     * se conserva. Útil para listas largas (p. ej. los nombres de miles de capítulos).
+     */
     suspend fun onlineTranslate(
         paragraphs: List<String>,
         from: String,
         to: String,
+        parallelism: Int = 1,
         loading: suspend (Int, Int) -> Unit = { _, _ -> }
     ): List<String> {
         if (paragraphs.isEmpty()) return emptyList()
 
         val chunks = paragraphs.chunkByLimit()
-        val translatedChunks = chunks.mapIndexed { i, chunk ->
-            loading.invoke(i, chunks.size)
-            translateChunk(chunk, from, to)
+        val translatedChunks = if (parallelism <= 1 || chunks.size == 1) {
+            chunks.mapIndexed { i, chunk ->
+                loading.invoke(i, chunks.size)
+                translateChunk(chunk, from, to)
+            }
+        } else {
+            val permits = Semaphore(parallelism)
+            coroutineScope {
+                chunks.mapIndexed { i, chunk ->
+                    async {
+                        permits.withPermit {
+                            loading.invoke(i, chunks.size)
+                            translateChunk(chunk, from, to)
+                        }
+                    }
+                }.awaitAll()
+            }
         }
 
         return translatedChunks.flatMap { it.split(paragraphsSeparatorRegex) }

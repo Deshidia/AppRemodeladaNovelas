@@ -257,9 +257,11 @@ object UIHelper {
             this?.dispose()
             return false
         }
+        // `sample` es el factor de REDUCCIÓN antes de desenfocar (3 = a un tercio). Antes se pasaba
+        // tal cual como escala, así que la imagen se AMPLIABA x3 y el desenfoque costaba 81 veces más.
         val transformations = if (radius > 0) listOf(
             BlurTransformation(
-                scale = sample.toFloat(),
+                scale = 1f / sample.coerceAtLeast(1),
                 radius = radius
             )
         ) else emptyList()

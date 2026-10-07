@@ -226,6 +226,18 @@ class ResultViewModel : ViewModel() {
     val chapters: MutableLiveData<List<ChapterData>?> =
         MutableLiveData<List<ChapterData>?>()
 
+    /** Se incrementa cuando termina de traducirse en segundo plano el nombre de los capítulos. */
+    val chapterNamesChanged: MutableLiveData<Int> = MutableLiveData<Int>(0)
+
+    private fun onChapterNamesTranslated() {
+        // los nombres cambian in place: se vuelve a filtrar (la búsqueda usa el nombre) y se avisa
+        // al fragmento para que repinte los textos visibles
+        if (currentTabIndex.value == 3) {
+            reorderChapters()
+        }
+        chapterNamesChanged.value = (chapterNamesChanged.value ?: 0) + 1
+    }
+
     /** Reglas de la pestaña "Sustituir" de esta novela. */
     val replacements: MutableLiveData<List<TextReplacement>> =
         MutableLiveData<List<TextReplacement>>(emptyList())
@@ -332,7 +344,10 @@ class ResultViewModel : ViewModel() {
         }
     }
 
-    private var cachedChapters: HashMap<ChapterData, Int> = hashMapOf()
+    // Por identidad: el nombre de un capítulo (parte de su hashCode) cambia in place cuando termina
+    // la traducción en segundo plano, y con un HashMap normal se perderían las entradas.
+    private var cachedChapters: java.util.IdentityHashMap<ChapterData, Int> =
+        java.util.IdentityHashMap()
 
     private fun chapterIndex(chapter: ChapterData): Int? {
         return cachedChapters[chapter]
@@ -341,10 +356,10 @@ class ResultViewModel : ViewModel() {
     private fun reCacheChapters() {
         val streamResponse = (load as? StreamResponse)
         if (streamResponse == null) {
-            cachedChapters = hashMapOf()
+            cachedChapters = java.util.IdentityHashMap()
             return
         }
-        val out = hashMapOf<ChapterData, Int>()
+        val out = java.util.IdentityHashMap<ChapterData, Int>()
         streamResponse.data.mapIndexed { index, chapterData ->
             out[chapterData] = index
         }
@@ -791,7 +806,9 @@ class ResultViewModel : ViewModel() {
             loadUrl = url
         }
 
-        val data = repo?.load(url)
+        // La traducción de los nombres de capítulo (miles de textos) sigue en segundo plano: la
+        // ficha se muestra en cuanto están el título, la sinopsis y las etiquetas.
+        val data = repo?.load(url, awaitChapterTranslation = false)
         loadMutex.withLock {
             when (data) {
                 is Resource.Success -> {
@@ -807,6 +824,16 @@ class ResultViewModel : ViewModel() {
                 else -> {}
             }
             loadResponse.postValue(data)
+        }
+
+        // Cuando acaben de traducirse los capítulos, se refresca lo que ya se está mostrando.
+        // Si ya venían traducidos (caché) no hay nada que refrescar.
+        val translation = ((data as? Resource.Success)?.value as? StreamResponse)
+            ?.chapterNamesTranslation
+        if (translation != null && !translation.isCompleted) {
+            viewModelScope.launch {
+                if (translation.await()) onChapterNamesTranslated()
+            }
         }
     }
 }
