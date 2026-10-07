@@ -667,6 +667,162 @@ Translator: Rainbow Turtle" />
                                 app:spanCount="1" />
                         </LinearLayout>
 
+                        <LinearLayout
+                            android:id="@+id/result_replace_holder"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/white_card"
+                            android:minHeight="500dp"
+                            android:orientation="vertical"
+                            android:paddingHorizontal="5dp"
+                            android:paddingTop="10dp"
+                            android:visibility="gone"
+                            tools:visibility="gone">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/replace_description"
+                                android:textColor="?attr/grayTextColor"
+                                android:textSize="13sp" />
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/replace_original_layout"
+                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:hint="@string/replace_original_hint">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/replace_original_input"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:importantForAutofill="no"
+                                    android:inputType="text"
+                                    android:maxLines="1" />
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                            <com.google.android.material.textfield.TextInputLayout
+                                android:id="@+id/replace_replacement_layout"
+                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:hint="@string/replace_replacement_hint">
+
+                                <com.google.android.material.textfield.TextInputEditText
+                                    android:id="@+id/replace_replacement_input"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:importantForAutofill="no"
+                                    android:inputType="text"
+                                    android:maxLines="1" />
+                            </com.google.android.material.textfield.TextInputLayout>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:text="@string/replace_when"
+                                android:textColor="?attr/textColor"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                            <RadioGroup
+                                android:id="@+id/replace_timing_group"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical">
+
+                                <RadioButton
+                                    android:id="@+id/replace_timing_before"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:minHeight="44dp"
+                                    android:text="@string/replace_before"
+                                    android:textColor="?attr/textColor" />
+
+                                <RadioButton
+                                    android:id="@+id/replace_timing_after"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:checked="true"
+                                    android:minHeight="44dp"
+                                    android:text="@string/replace_after"
+                                    android:textColor="?attr/textColor" />
+                            </RadioGroup>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/replace_timing_help"
+                                android:textColor="?attr/grayTextColor"
+                                android:textSize="12sp" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:orientation="horizontal">
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/replace_cancel_btn"
+                                    style="@style/BlackButton"
+                                    android:layout_width="0dp"
+                                    android:layout_marginStart="0dp"
+                                    android:layout_marginEnd="5dp"
+                                    android:layout_weight="1"
+                                    android:text="@string/replace_cancel"
+                                    android:visibility="gone" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/replace_add_btn"
+                                    style="@style/WhiteButton"
+                                    android:layout_width="0dp"
+                                    android:layout_marginStart="0dp"
+                                    android:layout_marginEnd="0dp"
+                                    android:layout_weight="1"
+                                    android:text="@string/replace_add"
+                                    app:icon="@drawable/ic_baseline_add_24"
+                                    app:iconSize="20dp" />
+                            </LinearLayout>
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginVertical="14dp"
+                                android:alpha="0.5"
+                                android:background="?attr/textColor" />
+
+                            <TextView
+                                android:id="@+id/replace_empty"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center"
+                                android:padding="10dp"
+                                android:text="@string/replace_empty"
+                                android:textColor="?attr/grayTextColor"
+                                android:textSize="14sp" />
+
+                            <LinearLayout
+                                android:id="@+id/replace_list"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical" />
+
+                            <TextView
+                                android:id="@+id/replace_saved_note"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:layout_marginBottom="16dp"
+                                android:text="@string/replace_saved_note"
+                                android:textColor="?attr/grayTextColor"
+                                android:textSize="12sp"
+                                android:visibility="gone" />
+                        </LinearLayout>
+
                     </LinearLayout>
                 </FrameLayout>
             </LinearLayout>

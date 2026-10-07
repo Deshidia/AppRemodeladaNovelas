@@ -32,6 +32,7 @@ import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.databinding.ChapterDialogBinding
 import com.lagradost.quicknovel.databinding.ChapterFilterPopupBinding
+import com.lagradost.quicknovel.databinding.ResultReplaceItemBinding
 import com.lagradost.quicknovel.databinding.FragmentResultBinding
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.debugException
@@ -44,7 +45,9 @@ import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.ui.setRecycledViewPool
+import com.lagradost.quicknovel.util.ReplaceTiming
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
+import com.lagradost.quicknovel.util.TextReplacement
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
@@ -64,6 +67,9 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
     private val viewModel: ResultViewModel by viewModels()
 
     companion object {
+        /** Id de la pestaña "Sustituir" (0 = Novela, 1 = Reseñas, 2 = Relacionado, 3 = Capítulos). */
+        const val TAB_REPLACE = 4
+
         fun newInstance(url: String, apiName: String, startAction: Int = 0): Bundle =
             Bundle().apply {
                 //println(data)
@@ -106,6 +112,119 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         activity?.apply {
             window?.navigationBarColor =
                 colorFromAttribute(R.attr.primaryBlackBackground)
+        }
+    }
+
+    /** Índice de la sustitución que se está editando (null = se está creando una nueva). */
+    private var editingReplacement: Int? = null
+
+    private fun resetReplaceForm(binding: FragmentResultBinding) {
+        binding.apply {
+            editingReplacement = null
+            replaceOriginalInput.setText("")
+            replaceReplacementInput.setText("")
+            replaceOriginalLayout.error = null
+            replaceReplacementLayout.error = null
+            replaceAddBtn.setText(R.string.replace_add)
+            replaceAddBtn.setIconResource(R.drawable.ic_baseline_add_24)
+            replaceCancelBtn.isVisible = false
+        }
+    }
+
+    private fun setupReplaceTab(binding: FragmentResultBinding) {
+        binding.apply {
+            replaceOriginalInput.doOnTextChanged { _, _, _, _ ->
+                replaceOriginalLayout.error = null
+                replaceReplacementLayout.error = null
+            }
+            replaceReplacementInput.doOnTextChanged { _, _, _, _ ->
+                replaceReplacementLayout.error = null
+            }
+
+            replaceCancelBtn.setOnClickListener {
+                resetReplaceForm(binding)
+                hideKeyboard()
+            }
+
+            replaceAddBtn.setOnClickListener {
+                val original = replaceOriginalInput.text?.toString().orEmpty()
+                // un salto de línea desalinearía los párrafos al traducir
+                val replacement =
+                    replaceReplacementInput.text?.toString().orEmpty().replace('\n', ' ')
+
+                if (original.isEmpty()) {
+                    replaceOriginalLayout.error = getString(R.string.replace_original_required)
+                    return@setOnClickListener
+                }
+                if (original == replacement) {
+                    replaceReplacementLayout.error = getString(R.string.replace_same_text)
+                    return@setOnClickListener
+                }
+
+                val timing =
+                    if (replaceTimingBefore.isChecked) ReplaceTiming.BEFORE_TRANSLATION
+                    else ReplaceTiming.AFTER_TRANSLATION
+
+                viewModel.saveReplacement(
+                    TextReplacement(original, replacement, timing),
+                    editingReplacement
+                )
+                resetReplaceForm(binding)
+                hideKeyboard()
+            }
+        }
+
+        observe(viewModel.replacements) { rules ->
+            renderReplacements(binding, rules)
+        }
+    }
+
+    private fun renderReplacements(binding: FragmentResultBinding, rules: List<TextReplacement>) {
+        binding.apply {
+            replaceList.removeAllViews()
+            replaceEmpty.isVisible = rules.isEmpty()
+            replaceSavedNote.isVisible = rules.isNotEmpty()
+
+            rules.forEachIndexed { index, rule ->
+                val item = ResultReplaceItemBinding.inflate(layoutInflater, replaceList, false)
+                val replacementText =
+                    rule.replacement.ifEmpty { getString(R.string.replace_item_empty_value) }
+                item.replaceItemText.text = "${rule.original}  →  $replacementText"
+                item.replaceItemTiming.setText(
+                    if (rule.timing == ReplaceTiming.BEFORE_TRANSLATION) R.string.replace_before
+                    else R.string.replace_after
+                )
+
+                // tocar una regla la carga en el formulario para editarla
+                item.root.setOnClickListener {
+                    editingReplacement = index
+                    replaceOriginalInput.setText(rule.original)
+                    replaceReplacementInput.setText(rule.replacement)
+                    if (rule.timing == ReplaceTiming.BEFORE_TRANSLATION) {
+                        replaceTimingBefore.isChecked = true
+                    } else {
+                        replaceTimingAfter.isChecked = true
+                    }
+                    replaceAddBtn.setText(R.string.replace_save)
+                    replaceAddBtn.icon = null
+                    replaceCancelBtn.isVisible = true
+                    replaceOriginalInput.requestFocus()
+                    replaceOriginalInput.setSelection(replaceOriginalInput.text?.length ?: 0)
+                }
+
+                item.replaceItemDelete.setOnClickListener {
+                    val editing = editingReplacement
+                    if (editing == index) {
+                        resetReplaceForm(binding)
+                    } else if (editing != null && editing > index) {
+                        // al borrar una regla anterior, la que se edita sube una posición
+                        editingReplacement = editing - 1
+                    }
+                    viewModel.deleteReplacement(index)
+                }
+
+                replaceList.addView(item.root)
+            }
         }
     }
 
@@ -215,36 +334,46 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                         res is StreamResponse && res.data.isNotEmpty() // this was removed because of lag, because of shitty android
                     val api = repo
 
-                    if (api != null && (api.hasReviews || hasRelated || hasChapters)) {
-                        resultTabs.isVisible = true
-                        resultTabs.addTab(resultTabs.newTab().setText(R.string.novel).setId(0))
-                        if (api.hasReviews) {
-                            resultTabs.addTab(
-                                resultTabs.newTab().setText(R.string.reviews).setId(1)
-                            )
-                        }
-                        if (hasRelated) {
-                            resultTabs.addTab(
-                                resultTabs.newTab().setText(R.string.related).setId(2)
-                            )
-                            relatedList.apply {
-                                setRecycledViewPool(MainAdapter.sharedPool)
-                                val mainPageAdapter = MainAdapter(this, 0)
-                                adapter = mainPageAdapter
-                                mainPageAdapter.submitList(res.related)
-                            }
-                            fixLayout(binding.root)
-                        }
-                        if (hasChapters) {
-                            resultTabs.addTab(
-                                resultTabs.newTab().setText(R.string.read_action_chapters).setId(3)
-                            )
-                        }
+                    // "Novela" y "Sustituir" son pestañas predeterminadas, el resto depende de la fuente
+                    resultTabs.isVisible = true
+                    resultTabs.addTab(resultTabs.newTab().setText(R.string.novel).setId(0))
+                    if (api?.hasReviews == true) {
+                        resultTabs.addTab(
+                            resultTabs.newTab().setText(R.string.reviews).setId(1)
+                        )
                     }
+                    if (hasRelated) {
+                        resultTabs.addTab(
+                            resultTabs.newTab().setText(R.string.related).setId(2)
+                        )
+                        relatedList.apply {
+                            setRecycledViewPool(MainAdapter.sharedPool)
+                            val mainPageAdapter = MainAdapter(this, 0)
+                            adapter = mainPageAdapter
+                            mainPageAdapter.submitList(res.related)
+                        }
+                        fixLayout(binding.root)
+                    }
+                    if (hasChapters) {
+                        resultTabs.addTab(
+                            resultTabs.newTab().setText(R.string.read_action_chapters).setId(3)
+                        )
+                    }
+                    resultTabs.addTab(
+                        resultTabs.newTab().setText(R.string.replace_tab).setId(TAB_REPLACE)
+                    )
+                    viewModel.loadReplacements(res.name)
+
                     val target = viewModel.currentTabIndex.value
                     if (target != null) {
-                        resultTabs.getTabAt(target)?.let { new ->
-                            resultTabs.selectTab(new)
+                        // las pestañas se buscan por id, no por posición (la posición varía
+                        // según qué pestañas tenga la novela)
+                        for (i in 0 until resultTabs.tabCount) {
+                            val tab = resultTabs.getTabAt(i)
+                            if (tab?.id == target) {
+                                resultTabs.selectTab(tab)
+                                break
+                            }
                         }
                     }
 
@@ -640,6 +769,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 chaptersFab.isVisible = 3 == pos
                 resultRelatedholder.isVisible = 2 == pos
                 resultChapterholder.isVisible = 3 == pos
+                resultReplaceHolder.isVisible = TAB_REPLACE == pos
             }
         }
 
@@ -648,6 +778,8 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 binding.resultTabs.selectTab(binding.resultTabs.getTabAt(pos))
             }
         }
+
+        setupReplaceTab(binding)
 
         observe(viewModel.readStates) { states ->
             val listName = LibraryListManager.describe(states)

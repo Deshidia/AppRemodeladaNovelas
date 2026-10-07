@@ -327,4 +327,23 @@
     <string name="history_save_to_library">Guardar en la biblioteca</string>
     <string name="library_categories_title">Establecer categorías</string>
     <string name="library_categories_edit">Editar</string>
+
+    <!-- Pestaña Sustituir -->
+    <string name="replace_tab">Sustituir</string>
+    <string name="replace_description">Sustituye palabras o frases en el texto de esta novela. Corrige errores antes de traducir, o adapta términos después de traducir. Deja el segundo campo vacío para eliminar el término.</string>
+    <string name="replace_original_hint">Término original</string>
+    <string name="replace_replacement_hint">Sustituir por</string>
+    <string name="replace_when">Cuándo sustituir</string>
+    <string name="replace_before">Antes de traducir</string>
+    <string name="replace_after">Después de traducir</string>
+    <string name="replace_timing_help">Antes: el traductor recibe el texto ya corregido (p. ej. arreglar algo que lo confundiría). Después: se aplica sobre el texto traducido (p. ej. Rodrgo → Rodrigo). Si no hay traducción activa, ambas se aplican al texto original.</string>
+    <string name="replace_add">Añadir</string>
+    <string name="replace_save">Guardar cambios</string>
+    <string name="replace_cancel">Cancelar</string>
+    <string name="replace_empty">Aún no hay sustituciones</string>
+    <string name="replace_saved_note">Los cambios se aplican la próxima vez que abras un capítulo en el lector.</string>
+    <string name="replace_original_required">Escribe el término a sustituir</string>
+    <string name="replace_same_text">Ambos textos son iguales</string>
+    <string name="replace_delete">Eliminar sustitución</string>
+    <string name="replace_item_empty_value">(eliminar)</string>
 </resources>
