@@ -4,6 +4,7 @@ import android.Manifest.permission.POST_NOTIFICATIONS
 import android.Manifest.permission.READ_EXTERNAL_STORAGE
 import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.app.Activity
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -96,6 +97,7 @@ import me.ag2s.epublib.domain.Resource
 import me.ag2s.epublib.epub.EpubReader
 import me.ag2s.epublib.epub.EpubWriter
 import me.ag2s.epublib.util.zip.AndroidZipFile
+import java.util.concurrent.ConcurrentHashMap
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -187,7 +189,7 @@ object BookDownloader2Helper {
         return "${getDirectory(apiName, author, name)}${fs}poster.jpg".replace("$fs$fs", "$fs")
     }
 
-    private val cachedBitmaps = hashMapOf<String, Bitmap>()
+    private val cachedBitmaps = ConcurrentHashMap<String, Bitmap>()
     fun getCachedBitmap(
         activity: Activity?,
         apiName: String,
@@ -815,6 +817,34 @@ object NotificationHelper {
     const val CHANNEL_DESCRIPT = "The download notification channel"
     private var hasCreatedNotChanel = false
 
+    const val FOREGROUND_NOTIFICATION_ID = 6660
+
+    /** Notificación mínima que mantiene vivo el worker de descarga con la app en segundo plano */
+    fun buildForegroundNotification(context: Context): Notification {
+        if (!hasCreatedNotChanel) {
+            context.createNotificationChannel()
+        }
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+            context, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+
+        return NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_baseline_autorenew_24)
+            .setContentTitle(context.getString(R.string.app_name))
+            .setContentText(context.getString(R.string.download_in_progress))
+            .setOngoing(true)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(pendingIntent)
+            .build()
+    }
+
     fun ComponentActivity.requestNotifications() {
         // Ask for notification permissions on Android 13
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -995,19 +1025,14 @@ object NotificationHelper {
 }
 
 object ImageDownloader {
-    private val cachedBitmapMutex = Mutex()
-    private val cachedBitmaps = hashMapOf<String, Bitmap>()
+    private val cachedBitmaps = ConcurrentHashMap<String, Bitmap>()
 
     suspend fun Context.getImageBitmapFromUrl(
         url: String,
         headers: Map<String, String>? = null
     ): Bitmap? {
         try {
-            with(cachedBitmapMutex) {
-                if (cachedBitmaps.containsKey(url)) {
-                    return cachedBitmaps[url]
-                }
-            }
+            cachedBitmaps[url]?.let { return it }
 
             val imageLoader = SingletonImageLoader.get(this)
 
@@ -1020,16 +1045,15 @@ object ImageDownloader {
                 }
                 .build()
 
-            val bitmap = runBlocking {
+            // Ya estamos en una función suspend: no hace falta bloquear el hilo con runBlocking
+            val bitmap = run {
                 val result = imageLoader.execute(request)
                 (result as? SuccessResult)?.image?.asDrawable(applicationContext.resources)
                     ?.toBitmap()
             }
 
             bitmap?.let {
-                with(cachedBitmapMutex) {
-                    cachedBitmaps[url] = it
-                }
+                cachedBitmaps[url] = it
             }
 
             return bitmap

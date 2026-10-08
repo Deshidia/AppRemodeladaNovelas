@@ -1,16 +1,20 @@
 package com.lagradost.quicknovel
 
 import android.content.Context
+import android.content.pm.ServiceInfo
+import android.os.Build
 import androidx.annotation.WorkerThread
 import androidx.core.net.toUri
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
+import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.download.DownloadViewModel
@@ -24,6 +28,9 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
     companion object {
         const val DATA = "data"
         const val ID = "id"
+
+        // Id de la novela: permite 1 solo worker de descarga por novela
+        const val DOWNLOAD_ID = "download_id"
 
         const val ID_REFRESH_DOWNLOADS = "REFRESH_DOWNLOADS"
         const val ID_REFRESH_READINGPROGRESS = "REFRESH_READINGPROGRESS"
@@ -101,15 +108,16 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
             )
         }
 
-        private fun startDownload(data: Any, context: Context) {
+        private fun startDownload(data: Any, downloadId: Int, context: Context) {
             getWorkerManager(context).enqueueUniqueWork(
-                ID_DOWNLOAD + System.currentTimeMillis(),
-                ExistingWorkPolicy.APPEND,
+                ID_DOWNLOAD + downloadId, // Solo 1 descarga por worker: evita duplicar la misma novela
+                ExistingWorkPolicy.KEEP,
                 OneTimeWorkRequest.Builder(DownloadFileWorkManager::class.java)
                     .setInputData(
                         Data.Builder()
                             .putString(ID, ID_DOWNLOAD)
                             .putInt(DATA, insertWork(data))
+                            .putInt(DOWNLOAD_ID, downloadId)
                             .build()
                     )
                     .build()
@@ -120,7 +128,7 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
             card: DownloadFragment.DownloadDataLoaded,
             context: Context
         ) {
-            startDownload(card, context)
+            startDownload(card, card.id, context)
         }
 
         fun download(
@@ -130,7 +138,30 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
             if(load.apiName == IMPORT_SOURCE || load.apiName == IMPORT_SOURCE_PDF) {
                 return
             }
-            startDownload(load, context)
+            startDownload(load, generateId(load, load.apiName), context)
+        }
+    }
+
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notification = NotificationHelper.buildForegroundNotification(context)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                NotificationHelper.FOREGROUND_NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            ForegroundInfo(NotificationHelper.FOREGROUND_NOTIFICATION_ID, notification)
+        }
+    }
+
+    /** Sin esto Android congela el proceso/la red al pasar la app a segundo plano */
+    private suspend fun runInForeground() {
+        try {
+            setForeground(getForegroundInfo())
+        } catch (t: Throwable) {
+            // ForegroundServiceStartNotAllowedException y similares: la descarga sigue igualmente
+            logError(t)
         }
     }
 
@@ -139,6 +170,7 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
         val id = this.workerParams.inputData.getString(ID)
         when (id) {
             ID_DOWNLOAD -> {
+                runInForeground()
                 when (val data = popWork(this.workerParams.inputData.getInt(DATA, -1))) {
                     is StreamResponse -> {
                         BookDownloader2.downloadWorkThread(data, Apis.getApiFromName(data.apiName))
@@ -160,6 +192,7 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
             }
 
             ID_REFRESH_DOWNLOADS -> {
+                runInForeground()
                 viewModel?.refreshInternal()
             }
 

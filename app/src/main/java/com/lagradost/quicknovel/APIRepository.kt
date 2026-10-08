@@ -250,10 +250,13 @@ class APIRepository(val api: MainAPI) {
     suspend fun loadReviews(
         url: String,
         page: Int,
-        showSpoilers: Boolean = false
+        showSpoilers: Boolean = false,
+        data: String? = null
     ): Resource<List<UserReview>> {
         return safeApiCall {
-            api.loadReviews(url, page, showSpoilers)
+            // Desde 3.8.0 los proveedores devuelven todas las reseñas marcando `containsSpoilers`
+            val reviews = api.loadReviews(url, page, data)
+            if (showSpoilers) reviews else reviews.filterNot { it.containsSpoilers }
         }
     }
 

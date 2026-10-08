@@ -1,6 +1,7 @@
 package com.lagradost.quicknovel.providers
 
 import android.net.Uri
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.quicknovel.ChapterData
 import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
@@ -10,9 +11,12 @@ import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.USER_AGENT
+import com.lagradost.quicknovel.fixUrlNull
 import com.lagradost.quicknovel.newChapterData
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
+import com.lagradost.quicknovel.providers.NovelFireProvider.RelatedResponse
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import kotlin.jvm.Throws
 
@@ -63,6 +67,20 @@ class DevilNovelsProvider : MainAPI() {
         ).parsed<GetFirstPageChaptersResponse>()
     }
 
+    private fun getRelated(document: Document): List<SearchResponse> {
+        return document.select("div.nv-related-grid a").mapNotNull { element ->
+            val href = element.attr("href") ?: return@mapNotNull null
+            val title = element.selectFirst("div.nv-related-name")?.text() ?: return@mapNotNull null
+            newSearchResponse(
+                name = title,
+                url = href
+            ) {
+                posterUrl = fixUrlNull(
+                    element.selectFirst("img")?.attr("src")
+                )
+            }
+        }
+    }
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
@@ -90,6 +108,7 @@ class DevilNovelsProvider : MainAPI() {
             this.author = document.selectFirst("#nvt-sinopsis > div > p:nth-child(3)")?.ownText()
             this.tags = document.selectFirst("#nvt-sinopsis > div > p:nth-child(5)")?.text()
                 ?.replace("Géneros: ", "")?.split(",")?.map { it.trim() }
+            related = getRelated(document)
         }
     }
 
@@ -120,34 +139,55 @@ class DevilNovelsProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val url = "$mainUrl/?post_type=page&s=${Uri.encode(query)}"
-        val document = app.get(url).document
+        val url = "$mainUrl/wp-admin/admin-ajax.php"
+        val document = app.post(url = url, data = mapOf(
+            "action" to "pvc_live_search",
+            "s" to "a will etern"
+        )).parsed<DevilNovelSearchResponse>()
 
-        return document.select("main#main > div > article").mapNotNull { card ->
-            val href = card.selectFirst("a")?.attr("href") ?: return@mapNotNull null
-            val title = card.selectFirst("h2")?.text() ?: return@mapNotNull null
-
-            newSearchResponse(title, href) {
-                posterUrl = card.selectFirst("img")?.attr("src")
+        return document.data.map { card ->
+            newSearchResponse(card.title, card.link) {
+                posterUrl = card.thumbnail
             }
         }
     }
 
     data class GetFirstPageChaptersResponse(
+        @JsonProperty("success")
         val success: Boolean,
+        @JsonProperty("data")
         val data: ChaptersPage
     )
 
     data class ChaptersPage(
+        @JsonProperty("chapters")
         val chapters: List<Chapters>,
+        @JsonProperty("page")
         val page: Int,
+        @JsonProperty("pages")
         val pages: Int,
+        @JsonProperty("total")
         val total: Int,
     )
 
     data class Chapters(
+        @JsonProperty("id")
         val id: Int,
+        @JsonProperty("link")
         val link: String,
+        @JsonProperty("title")
         val title: String,
+    )
+    data class DevilNovelSearchResponse(
+        @JsonProperty("data")
+        val data: List<SearchedNovel>
+    )
+    data class SearchedNovel(
+        @JsonProperty("title")
+        val title: String,
+        @JsonProperty("link")
+        val link: String,
+        @JsonProperty("thumbnail")
+        val thumbnail: String?,
     )
 }

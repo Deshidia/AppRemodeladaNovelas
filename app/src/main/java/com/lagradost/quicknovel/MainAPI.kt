@@ -4,6 +4,8 @@ import androidx.annotation.StringRes
 import androidx.annotation.WorkerThread
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.lagradost.nicehttp.NiceResponse
+import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
+import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
 import com.lagradost.quicknovel.CommonActivity.activity
 import com.lagradost.quicknovel.MainActivity.Companion.app
 import com.lagradost.quicknovel.mvvm.logError
@@ -58,7 +60,7 @@ abstract class MainAPI {
     open suspend fun loadReviews(
         url: String,
         page: Int,
-        showSpoilers: Boolean = false
+        data: String?,
     ): List<UserReview> {
         throw NotImplementedError()
     }
@@ -171,14 +173,20 @@ data class HeadMainPageResponse(
 )
 
 data class UserReview(
-    val review: String,
-    val reviewTitle: String?,
-    val username: String?,
-    val reviewDate: String?,
-    val avatarUrl: String?,
-    val rating: Int?,
-    val ratings: List<Pair<Int, String>>?,
-)
+    var review: String,
+    var title: String? = null,
+    var username: String? = null,
+    var avatarUrl: String? = null,
+    var rating: Int? = null,
+    var ratings: List<Pair<Int, String>>? = null,
+    var date: String? = null,
+    var avatarHeaders: Map<String, String>? = null,
+    var containsSpoilers: Boolean = false,
+) {
+    // Alias para el código antiguo (ReviewAdapter del fork)
+    val reviewTitle: String? get() = title
+    val reviewDate: String? get() = date
+}
 /*
 data class MainPageResponse(
     val name: String,
@@ -215,6 +223,22 @@ fun MainAPI.newSearchResponse(
     )
     builder.initializer()
     builder.posterHeaders = fixPosterHeaders(builder.posterHeaders)
+    return builder
+}
+
+fun MainAPI.newReview(
+    content: String,
+    fix: Boolean = true,
+    initializer: UserReview.() -> Unit = { },
+): UserReview {
+    val builder = UserReview(
+        review = content
+    )
+    builder.initializer()
+    if (fix) {
+        builder.avatarUrl = fixUrlNull(builder.avatarUrl)
+    }
+    builder.avatarHeaders = fixPosterHeaders(builder.avatarHeaders)
     return builder
 }
 
@@ -259,6 +283,9 @@ interface LoadResponse {
     val image: UiImage? get() = img(url = posterUrl, headers = posterHeaders)
     val apiName: String
     var related: List<SearchResponse>?
+    var reviewData: String?
+
+    val isImported: Boolean get() = (apiName == IMPORT_SOURCE || apiName == IMPORT_SOURCE_PDF)
 
     fun downloadImage(): UiImage? {
         val act = activity
@@ -287,7 +314,8 @@ data class StreamResponse(
     override var status: ReleaseStatus? = null,
     override var posterHeaders: Map<String, String>? = null,
     var nextChapter: ChapterData? = null,
-    override var related: List<SearchResponse>? = null
+    override var related: List<SearchResponse>? = null,
+    override var reviewData: String? = null
 ) : LoadResponse {
     /**
      * Traducción de los nombres de capítulo, que [APIRepository.load] hace en segundo plano
@@ -371,7 +399,8 @@ data class EpubResponse(
     var downloadLinks: List<DownloadLink>,
     var downloadExtractLinks: List<DownloadExtractLink>,
     override val apiName: String,
-    override var related: List<SearchResponse>? = null
+    override var related: List<SearchResponse>? = null,
+    override var reviewData: String? = null
 ) : LoadResponse
 
 suspend fun MainAPI.newEpubResponse(

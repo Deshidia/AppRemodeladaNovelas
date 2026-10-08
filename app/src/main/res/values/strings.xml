@@ -376,4 +376,35 @@
     <string name="replace_same_text">Both texts are identical</string>
     <string name="replace_delete">Delete replacement</string>
     <string name="replace_item_empty_value">(remove)</string>
+
+    <!-- Añadidas desde QuickNovel 3.8.0 -->
+    <string name="active_providers">%d providers enabled</string>
+    <string name="none">@string/type_none</string>
+    <string name="action_bar_up_description">Navigate up</string>
+    <string name="select_location">Select location</string>
+    <string name="overall">Overall</string>
+    <string name="app_settings">App settings</string>
+    <string name="download_list_view_key" translatable="false">download_list_view_key</string>
+    <string name="history_list_view_key" translatable="false">history_list_view_key</string>
+    <string name="search_list_view_key" translatable="false">search_list_view_key</string>
+    <string name="reader_settings">Reader Settings</string>
+    <string name="backup_location">Backup location</string>
+    <string name="logcat_success">Successfully stored logcat at %s</string>
+    <string name="color">Color</string>
+    <string name="transparency">Transparency</string>
+    <string name="luminance">Luminance</string>
+    <string name="color_wheel">Color wheel</string>
+    <string name="remove_from_bookmarks_format">This remove %s from your bookmarks.\nAre you sure?</string>
+    <string name="download_in_progress">Downloading…</string>
+    <string name="refresh">Refresh</string>
+    <string name="recently_checked_sort">Recently refreshed</string>
+    <string name="recently_visisted_sort">Recently read</string>
+    <string name="logcat_path_key">logcat_path_key</string>
+    <string name="epub_path_key">epub_path_key</string>
+    <string name="backup_path_key">backup_path_key</string>
+    <string name="translate_from">Translate from language</string>
+    <string name="translate_to">Translate to language</string>
+    <string name="log_cat">Logcat 🐈</string>
+    <string name="log_cat_location">Logcat location</string>
+    <string name="import_epubs">Import books</string>
 </resources>

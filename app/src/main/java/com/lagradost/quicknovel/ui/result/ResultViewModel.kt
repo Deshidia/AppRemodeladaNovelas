@@ -290,7 +290,12 @@ class ResultViewModel : ViewModel() {
                 if (loadPage == 1) {
                     reviews.postValue(Resource.Loading())
                 }
-                when (val data = api.loadReviews(url, loadPage, false)) {
+                when (val data = api.loadReviews(
+                    url,
+                    loadPage,
+                    showSpoilers = false,
+                    data = if (::load.isInitialized) load.reviewData else null
+                )) {
                     is Resource.Success -> {
                         val moreReviews = data.value
                         currentReviews.addAll(moreReviews)

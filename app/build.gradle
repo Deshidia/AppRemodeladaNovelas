@@ -70,7 +70,7 @@ dependencies {
     implementation 'androidx.core:core-ktx:1.16.0'
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
-    implementation 'org.jsoup:jsoup:1.21.2'
+    implementation 'org.jsoup:jsoup:1.22.2'
     implementation 'androidx.navigation:navigation-fragment-ktx:2.9.6'
     implementation 'androidx.navigation:navigation-ui-ktx:2.9.6'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
@@ -102,7 +102,7 @@ dependencies {
     implementation 'com.github.LagradOst:SafeFile:a926e7615a' // To Prevent the URI File Fu*kery
     implementation 'com.jaredrummler:colorpicker:1.1.0'
 
-    implementation 'com.github.Blatzar:NiceHttp:0.4.16'
+    implementation 'com.github.Blatzar:NiceHttp:0.4.18'
     implementation "io.coil-kt.coil3:coil:3.3.0"
     implementation "io.coil-kt.coil3:coil-network-okhttp:3.3.0"
 
