@@ -11,6 +11,7 @@ import com.lagradost.quicknovel.MainActivity.Companion.loadResult
 import com.lagradost.quicknovel.OnGoingSearch
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.mvvm.Resource
+import com.lagradost.quicknovel.ui.result.MigrationSource
 import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.Coroutines
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
@@ -38,12 +39,22 @@ class SearchViewModel : ViewModel() {
         _currentSearch.postValue(null)
     }
 
+    /**
+     * Novela desde la que se lanzó esta búsqueda (pulsación larga en el título de su ficha), o
+     * null en una búsqueda normal. Se pasa a las fichas que se abren desde los resultados para
+     * que, al guardar una en marcadores, se ofrezca duplicar o migrar.
+     */
+    var migrationSource: MigrationSource? = null
+
+    /** La búsqueda inicial (la del título original) solo se lanza la primera vez que se abre. */
+    var startQueryConsumed = false
+
     fun load(card: SearchResponse) {
-        loadResult(card.url, card.apiName)
+        loadResult(card.url, card.apiName, migrationSource = migrationSource)
     }
 
     fun showMetadata(card: SearchResponse) {
-        MainActivity.loadPreviewPage(card)
+        MainActivity.loadPreviewPage(card, migrationSource)
         //showToast(card.name)
     }
 

@@ -268,6 +268,13 @@ fun LoadResponse.setStatus(status: String?): Boolean {
 interface LoadResponse {
     val url: String
     var name: String
+
+    /**
+     * Título tal y como lo publica la fuente, guardado por [APIRepository] justo antes de
+     * traducir [name] al español. Es null si no se tradujo (la fuente ya está en español o la
+     * traducción falló); en ese caso [name] ya es el título original. Usa [untranslatedName].
+     */
+    var originalName: String?
     var author: String?
     var posterUrl: String?
 
@@ -299,6 +306,10 @@ interface LoadResponse {
     }
 }
 
+/** Título sin traducir (el de la fuente). Si no se tradujo, es simplemente [LoadResponse.name]. */
+val LoadResponse.untranslatedName: String
+    get() = originalName?.takeIf { it.isNotBlank() } ?: name
+
 data class StreamResponse(
     override val url: String,
     override var name: String,
@@ -324,6 +335,8 @@ data class StreamResponse(
      */
     @get:JsonIgnore
     var chapterNamesTranslation: Deferred<Boolean>? = null
+
+    override var originalName: String? = null
 }
 
 suspend fun MainAPI.newStreamResponse(
@@ -401,7 +414,9 @@ data class EpubResponse(
     override val apiName: String,
     override var related: List<SearchResponse>? = null,
     override var reviewData: String? = null
-) : LoadResponse
+) : LoadResponse {
+    override var originalName: String? = null
+}
 
 suspend fun MainAPI.newEpubResponse(
     name: String,

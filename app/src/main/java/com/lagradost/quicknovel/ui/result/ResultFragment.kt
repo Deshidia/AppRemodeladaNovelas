@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.text.TextUtils
+import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
@@ -31,6 +32,7 @@ import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainActivity.Companion.navigate
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.StreamResponse
+import com.lagradost.quicknovel.untranslatedName
 import com.lagradost.quicknovel.databinding.ChapterDialogBinding
 import com.lagradost.quicknovel.databinding.ChapterFilterPopupBinding
 import com.lagradost.quicknovel.databinding.ResultReplaceItemBinding
@@ -45,6 +47,7 @@ import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
+import com.lagradost.quicknovel.ui.search.SearchFragment
 import com.lagradost.quicknovel.ui.setRecycledViewPool
 import com.lagradost.quicknovel.util.DownloadTranslation
 import com.lagradost.quicknovel.util.DownloadTranslator
@@ -73,12 +76,19 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         /** Id de la pestaña "Sustituir" (0 = Novela, 1 = Reseñas, 2 = Relacionado, 3 = Capítulos). */
         const val TAB_REPLACE = 4
 
-        fun newInstance(url: String, apiName: String, startAction: Int = 0): Bundle =
+        fun newInstance(
+            url: String,
+            apiName: String,
+            startAction: Int = 0,
+            migrationSource: MigrationSource? = null
+        ): Bundle =
             Bundle().apply {
                 //println(data)
                 putString("url", url)
                 putString("apiName", apiName)
                 putInt("startAction", startAction)
+                // novela desde cuya búsqueda por título original se abrió esta ficha
+                migrationSource?.writeTo(this)
             }
 
     }
@@ -112,10 +122,28 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             viewModel.isResume = false
         }
 
+        // al migrar desde otra ficha, la antigua (que sigue debajo en la pila) deja de estar
+        // en la biblioteca: se vuelve a leer para no mostrar el marcador desfasado
+        viewModel.refreshReadStates()
+
         activity?.apply {
             window?.navigationBarColor =
                 colorFromAttribute(R.attr.primaryBlackBackground)
         }
+    }
+
+    /**
+     * Abre la búsqueda avanzada con el título de la novela SIN traducir (el que usan las
+     * fuentes), recordando esta novela como origen por si luego se migra a otra fuente.
+     */
+    private fun searchByOriginalTitle(res: LoadResponse) {
+        val query = res.untranslatedName.trim()
+        // SearchViewModel ignora las consultas de un solo carácter
+        if (query.length <= 1) return
+        activity?.navigate(
+            R.id.navigation_search,
+            SearchFragment.newInstance(query, viewModel.currentMigrationSource())
+        )
     }
 
     /** Índice de la sustitución que se está editando (null = se está creando una nueva). */
@@ -330,6 +358,13 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                         titleExpanded = !titleExpanded
                         resultTitle.maxLines = if (titleExpanded) 100 else 2
                         resultTitle.ellipsize = if (titleExpanded) null else TextUtils.TruncateAt.END
+                    }
+                    // Mantener pulsado (no el toque corto, que despliega el título completo)
+                    // busca esta novela en los demás proveedores con su título original.
+                    resultTitle.setOnLongClickListener { view ->
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        searchByOriginalTitle(res)
+                        true
                     }
 
                     resultAuthor.text = res.author ?: getString(R.string.no_author)
@@ -682,6 +717,9 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         activity?.window?.decorView?.clearFocus()
         hideKeyboard()
 
+        // si la ficha se abrió desde la búsqueda por título original de otra novela
+        viewModel.migrationSource = MigrationSource.readFrom(arguments)
+
         if (viewModel.loadResponse.value == null)
             viewModel.initState(apiName, url)
 
@@ -778,7 +816,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     context,
                     viewModel.readStates.value ?: emptySet()
                 ) { states ->
-                    viewModel.bookmark(states)
+                    viewModel.bookmarkOrAskMigration(states)
                 }
             }
 

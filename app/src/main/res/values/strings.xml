@@ -383,6 +383,17 @@
     <string name="replace_delete">Delete replacement</string>
     <string name="replace_item_empty_value">(remove)</string>
 
+    <!-- Search by original title / migrate to another provider -->
+    <string name="migrate_title">Duplicate or migrate?</string>
+    <string name="migrate_message">You are bookmarking “%1$s” from the search of “%2$s”.</string>
+    <string name="migrate_option_duplicate">Add duplicate: keeps both novels in your library.</string>
+    <string name="migrate_option_migrate">Migrate completely: removes “%1$s” from your bookmarks and leaves the new one with your chapter progress.</string>
+    <string name="migrate_progress_kept">Your current progress (chapter %1$d) is kept.</string>
+    <string name="migrate_action_duplicate">Add duplicate</string>
+    <string name="migrate_action_migrate">Migrate</string>
+    <string name="migrate_done">“%1$s” migrated</string>
+    <string name="migrate_done_progress">“%1$s” migrated · chapter %2$d</string>
+
     <!-- Añadidas desde QuickNovel 3.8.0 -->
     <string name="active_providers">%d providers enabled</string>
     <string name="none">@string/type_none</string>

@@ -1435,6 +1435,9 @@ class ReadActivityViewModel : ViewModel() {
             is Resource.Success -> {
                 init(loadedBook.value, context)
 
+                // antes del primer render, para que el subrayado ya salga al abrir el lector
+                loadUserMark()
+
                 initMLFromSettings(mlSettings, false)
 
                 // cant assume we know a chapter max as it can expand
@@ -1554,6 +1557,135 @@ class ReadActivityViewModel : ViewModel() {
             .usePlugin(SoftBreakAddsNewLinePlugin.create())
             .build()
         //reducer = MarkwonReducer.directChildren()
+    }
+
+    // =================================  SUBRAYADO DEL USUARIO  ==================================
+    // Solo puede haber UNO por novela: vive bajo EPUB_USER_MARK/<título> y crear uno nuevo en la
+    // misma novela sustituye al anterior. Las demás novelas conservan el suyo.
+
+    /** Fuente de verdad (legible desde cualquier hilo). El LiveData solo avisa de los cambios. */
+    @Volatile
+    private var userMarkValue: ReaderMark? = null
+    private val _userMark = MutableLiveData<ReaderMark?>(null)
+    val userMark: LiveData<ReaderMark?> = _userMark
+
+    /** Carga el subrayado guardado de la novela abierta (si lo hay). */
+    private fun loadUserMark() {
+        val mark = getKey<ReaderMark>(EPUB_USER_MARK, book.title())
+        userMarkValue = mark
+        _userMark.postValue(mark)
+    }
+
+    /** Sustituye el subrayado actual de esta novela por este. */
+    fun setUserMark(chapterIndex: Int, start: Int, end: Int, text: String) {
+        if (end <= start || text.isEmpty()) return
+        val mark = ReaderMark(
+            bookTitle = book.title(),
+            chapterIndex = chapterIndex,
+            start = start,
+            end = end,
+            text = text
+        )
+        setKey(EPUB_USER_MARK, book.title(), mark)
+        userMarkValue = mark
+        _userMark.postValue(mark)
+    }
+
+    /** Borra el subrayado de forma permanente. */
+    fun clearUserMark() {
+        removeKey(EPUB_USER_MARK, book.title())
+        userMarkValue = null
+        _userMark.postValue(null)
+    }
+
+    /**
+     * Borra el subrayado solo si sigue siendo [mark]. Lo usa el hilo del TTS: si mientras leía el
+     * usuario ha subrayado otra frase, no hay que llevarse por delante la nueva.
+     */
+    private fun clearUserMarkIf(mark: ReaderMark) {
+        if (userMarkValue == mark) clearUserMark()
+    }
+
+    /**
+     * Rango (inicio, fin exclusivo) del subrayado dentro del texto de [span], o null si no aplica.
+     * Se comprueba que el texto coincida: si los offsets ya no son válidos (traducción, texto
+     * original, cambio de sustituciones...) la marca simplemente no se pinta, pero NO se borra.
+     */
+    fun userMarkRangeFor(span: TextSpan): Pair<Int, Int>? {
+        val mark = userMarkValue ?: return null
+        if (mark.chapterIndex != span.index) return null
+        if (mark.start < span.start || mark.end > span.end) return null
+        val localStart = mark.start - span.start
+        val localEnd = mark.end - span.start
+        if (localEnd > span.text.length) return null
+        if (span.text.subSequence(localStart, localEnd).toString() != mark.text) return null
+        return localStart to localEnd
+    }
+
+    /** ¿La selección [localStart, localEnd) de [span] toca el subrayado actual? */
+    fun userMarkOverlaps(span: TextSpan, localStart: Int, localEnd: Int): Boolean {
+        val range = userMarkRangeFor(span) ?: return false
+        return localStart < range.second && localEnd > range.first
+    }
+
+    /** Dónde empieza/acaba la marca dentro del texto del capítulo tal y como lo lee el TTS. */
+    private data class TTSMarkTarget(
+        val stored: ReaderMark,
+        val chapterIndex: Int,
+        val start: Int,
+        val end: Int
+    )
+
+    /** Busca [mark] en [text]: primero en sus offsets y, si ya no encaja, por su texto. */
+    private fun locateMarkInText(mark: ReaderMark, text: CharSequence): Pair<Int, Int>? {
+        if (mark.start >= 0 && mark.end <= text.length &&
+            text.subSequence(mark.start, mark.end).toString() == mark.text
+        ) {
+            return mark.start to mark.end
+        }
+
+        // los offsets ya no valen: nos quedamos con la aparición del texto más cercana
+        val str = text.toString()
+        var best = -1
+        var from = 0
+        while (true) {
+            val found = str.indexOf(mark.text, from)
+            if (found == -1) break
+            if (best == -1 || kotlin.math.abs(found - mark.start) < kotlin.math.abs(best - mark.start)) {
+                best = found
+            }
+            from = found + 1
+        }
+        return if (best == -1) null else best to (best + mark.text.length)
+    }
+
+    /**
+     * Si hay un subrayado, carga su capítulo (si hace falta) y devuelve dónde está para que el TTS
+     * empiece por él. Devuelve null si no hay subrayado o ya no se encuentra en el texto.
+     */
+    private suspend fun resolveUserMarkForTTS(): TTSMarkTarget? {
+        val stored = userMarkValue ?: return null
+
+        // vuelve al instante si el capítulo ya está cargado o cargándose
+        loadIndividualChapter(stored.chapterIndex)
+
+        for (attempt in 0 until 300) { // ~30 s como máximo (una traducción puede tardar)
+            when (val data = chapterMutex.withLock { chapterData[stored.chapterIndex] }) {
+                is Resource.Success -> {
+                    // el TTS lee siempre el texto "rendered" (traducido si hay traducción)
+                    val (start, end) = locateMarkInText(stored, data.value.rendered) ?: return null
+                    return TTSMarkTarget(stored, stored.chapterIndex, start, end)
+                }
+
+                is Resource.Loading -> {
+                    if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) return null
+                    delay(100)
+                }
+
+                else -> return null
+            }
+        }
+        return null
     }
 
     // ========================================  TTS STUFF ========================================
@@ -1694,8 +1826,14 @@ class ReadActivityViewModel : ViewModel() {
                 var ttsInnerIndex = 0 // this inner index is different from what is set
                 var index = dIndex.index
 
+                // Si el usuario dejó una frase subrayada, el TTS empieza exactamente por ella y,
+                // cuando termina de leerla, el subrayado se borra de forma permanente.
+                var markTarget: TTSMarkTarget? = resolveUserMarkForTTS()
+
                 let {
-                    val startChar = dIndex.char
+                    val target = markTarget
+                    if (target != null) index = target.chapterIndex
+                    val startChar = target?.start ?: dIndex.char
 
                     val lines = chapterMutex.withLock {
                         chapterData[index].letInner {
@@ -1707,7 +1845,13 @@ class ReadActivityViewModel : ViewModel() {
                         return@let
                     }
 
-                    val idx = lines.indexOfFirst { it.startChar >= startChar }
+                    // La selección puede empezar a mitad de frase: con la marca partimos de la
+                    // línea que CONTIENE su inicio en vez de saltar a la siguiente.
+                    val idx = if (target != null) {
+                        lines.indexOfFirst { it.endChar > startChar }
+                    } else {
+                        lines.indexOfFirst { it.startChar >= startChar }
+                    }
                     if (idx != -1) {
                         ttsInnerIndex = idx
                     } else {
@@ -1847,6 +1991,21 @@ class ReadActivityViewModel : ViewModel() {
                         if (isPauseDuration > 0 && pendingTTSSkip == 0) {
                             notify()
                             continue
+                        }
+
+                        // Dejamos atrás la última frase de la marca (por haberla leído entera o
+                        // porque el usuario ha saltado hacia delante): se borra para siempre.
+                        // Retroceder no la borra, ya que se vuelve a leer. Tampoco si el usuario
+                        // ha parado el TTS a mitad de frase (waitForOr también retorna entonces).
+                        markTarget?.let { target ->
+                            val movingForward = pendingTTSSkip >= 0 &&
+                                    currentTTSStatus != TTSHelper.TTSStatus.IsStopped
+                            if (movingForward && index == target.chapterIndex &&
+                                (nextLine == null || nextLine.startChar >= target.end)
+                            ) {
+                                clearUserMarkIf(target.stored)
+                                markTarget = null
+                            }
                         }
 
                         if (pendingTTSSkip != 0) {

@@ -55,9 +55,12 @@ import com.lagradost.quicknovel.util.DownloadTranslation
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.TextReplacement
 import com.lagradost.quicknovel.util.TextReplacements
+import com.lagradost.quicknovel.CommonActivity.showToast
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 
 class ResultViewModel : ViewModel() {
@@ -202,6 +205,13 @@ class ResultViewModel : ViewModel() {
     var readStates: MutableLiveData<Set<Int>> = MutableLiveData<Set<Int>>(emptySet())
 
     var apiName : String = ""
+
+    /**
+     * Si esta ficha (o vista previa) se abrió desde la búsqueda por título original de otra
+     * novela, esa novela. Al guardar esta en marcadores se pregunta entonces si se duplica o si
+     * se migra desde aquella. Null en cualquier otro caso.
+     */
+    var migrationSource: MigrationSource? = null
 
     /*This is to detect whether it actually returned to
      the fragment after reading a chapter, and thus update the list of chapters.*/
@@ -627,6 +637,84 @@ class ResultViewModel : ViewModel() {
         }
 
         readStates.postValue(LibraryListManager.getNovelLists(loadId))
+    }
+
+    /** Esta novela como origen de una búsqueda por título original; null si aún no ha cargado. */
+    fun currentMigrationSource(): MigrationSource? {
+        if (!hasLoaded) return null
+        return MigrationSource(loadId, load.name, apiName)
+    }
+
+    /**
+     * Vuelve a leer en qué listas está la novela. Otra pantalla pudo cambiarlo mientras esta
+     * ficha seguía abierta debajo (p. ej. al migrar, la antigua sale de la biblioteca).
+     */
+    fun refreshReadStates() {
+        if (!hasLoaded) return
+        readStates.postValue(LibraryListManager.getNovelLists(loadId))
+    }
+
+    /**
+     * Lo que debe llamar el botón de marcadores con las listas elegidas. Guarda sin más salvo que
+     * la ficha venga de la búsqueda por título original de otra novela ([migrationSource]) y esta
+     * aún no esté en ninguna lista: entonces pregunta si se añade como duplicado o si se migra.
+     */
+    fun bookmarkOrAskMigration(states: Set<Int>) = viewModelScope.launch {
+        val source = migrationSource
+        val newName: String? = loadMutex.withLock {
+            if (!hasLoaded || source == null) {
+                null
+            } else when {
+                // quitar de la biblioteca, o la misma novela: no hay nada que decidir
+                states.isEmpty() || source.id == loadId -> null
+                // ya estaba en alguna lista: solo se están cambiando las listas
+                LibraryListManager.getNovelLists(loadId).isNotEmpty() -> null
+                else -> load.name
+            }
+        }
+
+        val act = activity
+        if (source == null || newName == null || act == null) {
+            bookmark(states)
+            return@launch
+        }
+
+        NovelMigration.showChoiceDialog(
+            act,
+            source,
+            newName,
+            onDuplicate = { bookmark(states) },
+            onMigrate = { migrate(source, states) }
+        )
+    }
+
+    /**
+     * Migración completa: esta novela entra en la biblioteca con las listas elegidas, hereda el
+     * progreso de capítulos de [source] y [source] sale de la biblioteca. Se hace en este orden
+     * para que, si algo fallara a medias, se conserven las dos en vez de perder ambas.
+     */
+    private fun migrate(source: MigrationSource, states: Set<Int>) = viewModelScope.launch {
+        val newName: String = loadMutex.withLock {
+            if (!hasLoaded) return@launch
+            LibraryListManager.setNovelLists(loadId, states)
+            updateBookmarkData()
+            load.name
+        }
+
+        val lastRead = withContext(Dispatchers.IO) {
+            val read = NovelMigration.lastChapterRead(source.name)
+            NovelMigration.copyProgress(source.name, newName)
+            NovelMigration.removeFromLibrary(source)
+            read
+        }
+
+        readStates.postValue(LibraryListManager.getNovelLists(loadId))
+
+        val ctx = context ?: return@launch
+        showToast(
+            if (lastRead > 0) ctx.getString(R.string.migrate_done_progress, newName, lastRead)
+            else ctx.getString(R.string.migrate_done, newName)
+        )
     }
 
     fun share() = viewModelScope.launch {

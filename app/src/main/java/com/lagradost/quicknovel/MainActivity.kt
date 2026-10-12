@@ -59,6 +59,7 @@ import com.lagradost.quicknovel.ui.TTSMiniPlayerBinder
 import com.lagradost.quicknovel.ui.LibraryCategoriesDialog
 import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.download.DownloadFragment
+import com.lagradost.quicknovel.ui.result.MigrationSource
 import com.lagradost.quicknovel.ui.result.ResultFragment
 import com.lagradost.quicknovel.ui.result.ResultViewModel
 import com.lagradost.quicknovel.ui.search.SearchFragment
@@ -96,8 +97,11 @@ class MainActivity : AppCompatActivity() {
                 _mainActivity = WeakReference(value)
             }
 
-        fun loadPreviewPage(searchResponse: SearchResponse) {
-            mainActivity?.loadPopup(searchResponse.url, searchResponse.apiName)
+        fun loadPreviewPage(
+            searchResponse: SearchResponse,
+            migrationSource: MigrationSource? = null
+        ) {
+            mainActivity?.loadPopup(searchResponse.url, searchResponse.apiName, migrationSource)
         }
 
         fun loadPreviewPage(card: DownloadFragment.DownloadDataLoaded) {
@@ -158,8 +162,13 @@ class MainActivity : AppCompatActivity() {
         // === API ===
         lateinit var navOptions: NavOptions
 
-        fun loadResult(url: String, apiName: String, startAction: Int = 0) {
-            (activity as? AppCompatActivity)?.loadResult(url, apiName, startAction)
+        fun loadResult(
+            url: String,
+            apiName: String,
+            startAction: Int = 0,
+            migrationSource: MigrationSource? = null
+        ) {
+            (activity as? AppCompatActivity)?.loadResult(url, apiName, startAction, migrationSource)
         }
 
         fun Activity?.navigate(@IdRes navigation: Int, arguments: Bundle? = null) {
@@ -174,12 +183,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        fun FragmentActivity.loadResult(url: String, apiName: String, startAction: Int = 0) {
+        fun FragmentActivity.loadResult(
+            url: String,
+            apiName: String,
+            startAction: Int = 0,
+            migrationSource: MigrationSource? = null
+        ) {
             SearchFragment.currentDialog?.dismiss()
             runOnUiThread {
                 this.navigate(
                     R.id.global_to_navigation_results,
-                    ResultFragment.newInstance(url, apiName, startAction)
+                    ResultFragment.newInstance(url, apiName, startAction, migrationSource)
                 )
                 /*supportFragmentManager.beginTransaction()
                         .setCustomAnimations(
@@ -344,17 +358,22 @@ class MainActivity : AppCompatActivity() {
     fun loadPopup(
         resultCached: ResultCached,
     ) {
+        viewModel.migrationSource = null
         viewModel.initState(resultCached)
     }
 
     fun loadPopup(card: DownloadFragment.DownloadDataLoaded) {
+        viewModel.migrationSource = null
         viewModel.initState(card)
     }
 
     fun loadPopup(
         url: String,
         apiName: String,
+        migrationSource: MigrationSource? = null,
     ) {
+        // Este ViewModel lo comparten todas las vistas previas: se fija siempre, incluso a null.
+        viewModel.migrationSource = migrationSource
         viewModel.initState(apiName, url)
     }
 
@@ -522,6 +541,12 @@ class MainActivity : AppCompatActivity() {
 
         binding?.apply {
             navView.isVisible = isNavVisible
+            // Desde la ficha se puede abrir la búsqueda sin pasar por la barra: se marca aquí.
+            // Se usa isChecked (no selectedItemId) para no disparar el listener de la barra,
+            // que volvería a navegar y recrearía la búsqueda sin sus argumentos.
+            if (destination.id == R.id.navigation_search) {
+                navView.menu.findItem(R.id.navigation_search)?.isChecked = true
+            }
         }
     }
 
@@ -669,12 +694,12 @@ class MainActivity : AppCompatActivity() {
                                 view.context,
                                 viewModel.readStates.value ?: emptySet()
                             ) { states ->
-                                viewModel.bookmark(states)
+                                viewModel.bookmarkOrAskMigration(states)
                             }
                         }
 
                         readMore.setOnClickListener {
-                            loadResult(d.url, viewModel.apiName)
+                            loadResult(d.url, viewModel.apiName, migrationSource = viewModel.migrationSource)
                             hidePreviewPopupDialog()
                         }
 
@@ -687,7 +712,7 @@ class MainActivity : AppCompatActivity() {
                         resultviewPreviewPoster.apply {
                             setImage(d.downloadImage())
                             setOnClickListener {
-                                loadResult(d.url, viewModel.apiName)
+                                loadResult(d.url, viewModel.apiName, migrationSource = viewModel.migrationSource)
                                 hidePreviewPopupDialog()
                             }
                         }
@@ -695,7 +720,7 @@ class MainActivity : AppCompatActivity() {
                         resultviewPreviewTitle.text = d.name
 
                         resultviewPreviewMoreInfo.setOnClickListener {
-                            loadResult(d.url, viewModel.apiName)
+                            loadResult(d.url, viewModel.apiName, migrationSource = viewModel.migrationSource)
                             hidePreviewPopupDialog()
                         }
 

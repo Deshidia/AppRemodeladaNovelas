@@ -152,6 +152,13 @@ class APIRepository(val api: MainAPI) {
     /** Traduce título, sinopsis y etiquetas al español (si la fuente no está ya en español). */
     private suspend fun translateMetadata(response: LoadResponse) {
         if (api.lang == "es") return
+
+        // El título traducido forma parte del id de la novela y es lo que se muestra, pero para
+        // buscarla en otros proveedores hace falta el original: se guarda antes de pisarlo.
+        if (response.originalName == null) {
+            response.originalName = response.name
+        }
+
         try {
             val toTranslate = mutableListOf<String>()
             toTranslate.add(response.name)

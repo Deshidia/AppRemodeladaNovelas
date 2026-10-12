@@ -23,6 +23,7 @@ import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.ui.BaseFragment
 import com.lagradost.quicknovel.ui.home.BrowseAdapter
 import com.lagradost.quicknovel.ui.home.HomeViewModel
+import com.lagradost.quicknovel.ui.result.MigrationSource
 import com.lagradost.quicknovel.ui.setRecycledViewPool
 import com.lagradost.quicknovel.ui.settings.SettingsFragment
 import com.lagradost.quicknovel.util.Event
@@ -38,6 +39,19 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         val configEvent = Event<Int>()
         var currentSpan = 1
         var currentDialog: Dialog? = null
+
+        private const val ARG_QUERY = "query"
+
+        /**
+         * Argumentos para abrir la búsqueda ya lanzada con [query] y en modo avanzado (resultados
+         * separados por proveedor). [migrationSource] es la novela desde la que se busca, para
+         * ofrecer duplicar o migrar si se guarda en marcadores alguno de los resultados.
+         */
+        fun newInstance(query: String, migrationSource: MigrationSource?): Bundle =
+            Bundle().apply {
+                putString(ARG_QUERY, query)
+                migrationSource?.writeTo(this)
+            }
 
         fun loadHomepageList(viewModel: SearchViewModel, item: HomePageList) {
             if (currentDialog != null) return
@@ -97,12 +111,21 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
     lateinit var searchMagIcon: ImageView
 
     override fun onBindingCreated(binding: FragmentSearchBinding, savedInstanceState: Bundle?) {
+        // Búsqueda lanzada desde la ficha de una novela (pulsación larga en el título).
+        val startQuery = arguments?.getString(ARG_QUERY)?.takeIf { it.isNotBlank() }
+        viewModel.migrationSource = MigrationSource.readFrom(arguments)
+
         activity?.window?.setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+            // ya viene con la consulta hecha: no hace falta el teclado
+            if (startQuery != null) WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+            else WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
         )
 
         val settingsManager = context?.let { PreferenceManager.getDefaultSharedPreferences(it) }
-        val isAdvancedSearch = settingsManager?.getBoolean("advanced_search", true) == true
+        // Buscando la misma novela en otros proveedores siempre se muestran separados por
+        // proveedor, aunque el ajuste general de búsqueda avanzada esté desactivado.
+        val isAdvancedSearch =
+            startQuery != null || settingsManager?.getBoolean("advanced_search", true) == true
         binding.searchMasterRecycler.isVisible = false
         binding.searchAllRecycler.isGone = false
 
@@ -212,6 +235,14 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
 
         observe(homeViewModel.homeApis) { list ->
             browseAdapter.submitList(list)
+        }
+
+        // Al volver desde una ficha este método se ejecuta otra vez, pero el ViewModel conserva
+        // los resultados: la búsqueda solo se lanza la primera vez.
+        if (startQuery != null && !viewModel.startQueryConsumed) {
+            viewModel.startQueryConsumed = true
+            binding.mainSearch.setQuery(startQuery, true)
+            binding.mainSearch.clearFocus()
         }
 
         /*
