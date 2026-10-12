@@ -909,6 +909,15 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             updateTTSLine(line)
         }
 
+        // El subrayado del usuario cambió (nuevo, sustituido, quitado, o borrado al terminar de
+        // leerlo con el TTS). Se invalida TODO el adapter y no solo lo visible: los holders que
+        // están en la caché del RecyclerView se reutilizan sin volver a hacer bind y, si no, al
+        // volver a hacer scroll aparecería un subrayado ya borrado. Solo se re-enlaza lo que se
+        // ve; el resto queda marcado como sucio hasta que haga falta.
+        observeNullable(viewModel.userMark) {
+            textAdapter.notifyItemRangeChanged(0, textAdapter.itemCount)
+        }
+
         observe(viewModel.title) { title ->
             binding.readToolbar.title = title
         }

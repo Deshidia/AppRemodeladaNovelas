@@ -5,6 +5,8 @@
     <color name="readerHightlightedTextColor">#6600ABFF</color>
     <color name="readerHightlightedMetaInfo">#191919</color>
     <color name="roundedTextBorder">#DD0277BD</color>
+    <!-- Subrayado del usuario (marcador de lectura). Distinto del azul del resaltado TTS. -->
+    <color name="readerUserMark">#FFB300</color>
 
     <color name="novelPassionColor">#FFF</color>
     <color name="wuxiaWorldOnlineColor">#24242B</color>

@@ -24,6 +24,12 @@
     <string name="download_text">Download</string>
     <string name="download">Download</string>
     <string name="download_from_chapter">Partial download</string>
+    <string name="download_with_ai">Download with AI</string>
+    <string name="download_with_deepl">Download with DeepL</string>
+    <string name="translation_languages_missing">Set different source and target languages in the reader\'s translation settings first</string>
+    <string name="translation_ai_key_missing">Add your AI (Gemini) API key in the reader\'s translation settings first</string>
+    <string name="translation_chapter_failed">Could not translate chapter %1$s: %2$s</string>
+    <string name="translation_not_applied">Chapter %1$s came back untranslated. Check the languages and the API key</string>
     <string name="download_ml">Download translation model</string>
     <string name="download_ml_long">To translate locally the app needs to download the translation model (~30MB)</string>
     <string name="novel_imagecover_descript">Novel Imagecover</string>
@@ -407,4 +413,6 @@
     <string name="log_cat">Logcat 🐈</string>
     <string name="log_cat_location">Logcat location</string>
     <string name="import_epubs">Import books</string>
+    <string name="user_mark_add">Underline</string>
+    <string name="user_mark_remove">Remove underline</string>
 </resources>

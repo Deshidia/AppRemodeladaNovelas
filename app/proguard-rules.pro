@@ -35,3 +35,5 @@
 -keep class com.lagradost.quicknovel.util.TextReplacement { *; }
 -keep class com.lagradost.quicknovel.util.NovelReplacementRules { *; }
 -keep class com.lagradost.quicknovel.util.ReplaceTiming { *; }
+-keep class com.lagradost.quicknovel.ReaderMark { *; }
+-keep class com.lagradost.quicknovel.ReaderMark { *; }

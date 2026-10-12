@@ -23,6 +23,12 @@
     <string name="download_text">Скачать</string>
     <string name="download">Скачать</string>
     <string name="download_from_chapter">Частичная загрузка</string>
+    <string name="download_with_ai">Скачать с переводом ИИ</string>
+    <string name="download_with_deepl">Скачать с переводом DeepL</string>
+    <string name="translation_languages_missing">Сначала выберите разные языки оригинала и перевода в настройках перевода в читалке</string>
+    <string name="translation_ai_key_missing">Сначала добавьте API-ключ ИИ (Gemini) в настройках перевода в читалке</string>
+    <string name="translation_chapter_failed">Не удалось перевести главу %1$s: %2$s</string>
+    <string name="translation_not_applied">Глава %1$s осталась непереведённой. Проверьте языки и API-ключ</string>
     <string name="download_ml">Скачать модель перевода</string>
     <string name="download_ml_long">Для локального перевода нужно скачать модель перевода (~30МБ)</string>
     <string name="novel_imagecover_descript">Обложка новеллы</string>

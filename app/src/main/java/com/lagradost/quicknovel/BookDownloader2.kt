@@ -69,8 +69,11 @@ import com.lagradost.quicknovel.util.Apis.Companion.getApiFromNameOrNull
 import com.lagradost.quicknovel.util.AppUtils.textToHtmlChapter
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.Coroutines.main
+import com.lagradost.quicknovel.util.DownloadTranslation
+import com.lagradost.quicknovel.util.DownloadTranslator
 import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.ResultCached
+import com.lagradost.quicknovel.util.TranslationNotAppliedException
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.pmap
 import com.lagradost.safefile.SafeFile
@@ -1580,8 +1583,12 @@ object BookDownloader2 {
         )
     }
 
-    fun download(load: LoadResponse, context: Context) {
-        DownloadFileWorkManager.download(load, context)
+    fun download(
+        load: LoadResponse,
+        context: Context,
+        translation: DownloadTranslation? = null
+    ) {
+        DownloadFileWorkManager.download(load, context, translation)
     }
 
     private suspend fun setSuffixData(load: LoadResponse, apiName: String) {
@@ -2391,21 +2398,39 @@ object BookDownloader2 {
     }
 
     @WorkerThread
-    suspend fun downloadWorkThread(load: StreamResponse, api: APIRepository) {
+    suspend fun downloadWorkThread(
+        load: StreamResponse,
+        api: APIRepository,
+        translation: DownloadTranslation? = null
+    ) {
         val id = generateId(load, api.name)
         val desiredStart = (
                 getKey<Int>(
                     DOWNLOAD_OFFSET, id.toString(),
                 ) ?: 0
                 ).coerceIn(0, load.data.size)
-        downloadWorkThread(load, api, desiredStart until load.data.size)
+        downloadWorkThread(load, api, desiredStart until load.data.size, translation)
+    }
+
+    private fun translationErrorMessage(context: Context, index: Int, t: Throwable): String {
+        val chapter = (index + 1).toString()
+        return if (t is TranslationNotAppliedException) {
+            context.getString(R.string.translation_not_applied, chapter)
+        } else {
+            context.getString(
+                R.string.translation_chapter_failed,
+                chapter,
+                t.message ?: t.javaClass.simpleName
+            )
+        }
     }
 
     @WorkerThread
     suspend fun downloadWorkThread(
         load: StreamResponse,
         api: APIRepository,
-        range: ClosedRange<Int>
+        range: ClosedRange<Int>,
+        translation: DownloadTranslation? = null
     ) {
         val context = activity ?: return
         val filesDir = context.filesDir
@@ -2424,8 +2449,22 @@ object BookDownloader2 {
         setPrefixData(load, api.name, totalItems.toLong(), alreadyDownloaded)
 
         var downloadedTotal = 0L // how many successful get requests
+        var translatedTotal = 0 // how many chapters have been rewritten with their translation
 
         try {
+            // Descarga con traducción: los ajustes pueden haber cambiado desde que se pulsó el botón
+            val translator = if (translation == null) {
+                null
+            } else {
+                val problem = DownloadTranslator.validate(translation, load.name)
+                if (problem != null) {
+                    showToast(problem)
+                    changeDownload(id) { state = DownloadState.IsFailed }
+                    return
+                }
+                DownloadTranslator.create(translation, load.name)
+            }
+
             // 1. download the image
             downloadImage(load, sApiName, sAuthor, sName, filesDir)
 
@@ -2469,14 +2508,49 @@ object BookDownloader2 {
                         index
                     )
                 val rFile = File(filepath)
-                // TO PREVENT INVALID FILE FROM HAVING TO REMOVE EVERYTHING
-                if (rFile.exists() && rFile.length() > 10) {
-                    continue
+                val hasValidFile = rFile.exists() && rFile.length() > 10
+
+                var needsDownload = !hasValidFile
+                if (translator == null) {
+                    // TO PREVENT INVALID FILE FROM HAVING TO REMOVE EVERYTHING
+                    if (hasValidFile) {
+                        continue
+                    }
+                } else if (hasValidFile) {
+                    val currentMarker = DownloadTranslator.markerOf(rFile)
+                    // ya está traducido igual (mismo motor e idioma): nada que hacer
+                    if (currentMarker == translator.marker) {
+                        continue
+                    }
+                    // traducido antes con otro motor o idioma: se necesita el original otra vez
+                    if (currentMarker != null) {
+                        needsDownload = true
+                    }
                 }
 
                 val beforeDownloadTime = System.currentTimeMillis()
-                val hasDownloadedChapter =
-                    BookDownloader2Helper.downloadIndividualChapter(filepath, api, data)
+                var hasDownloadedChapter = true
+                if (needsDownload) {
+                    hasDownloadedChapter = BookDownloader2Helper.downloadIndividualChapter(
+                        // forceReload también cura un archivo existente pero inválido (<= 10 bytes)
+                        filepath, api, data, forceReload = rFile.exists()
+                    )
+                }
+
+                // si la traducción falla el capítulo original queda guardado sin marca, así que
+                // al repetir la descarga con traducción solo se rehacen los que faltan
+                if (hasDownloadedChapter && translator != null) {
+                    try {
+                        translator.translateFile(rFile)
+                        translatedTotal += 1
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (t: Throwable) {
+                        logError(t)
+                        showToast(translationErrorMessage(context, index, t))
+                        hasDownloadedChapter = false
+                    }
+                }
 
                 if (hasDownloadedChapter) {
                     downloadedTotal += 1
@@ -2552,6 +2626,10 @@ object BookDownloader2 {
                 setSuffixData(load, api.name)
             }
         } finally {
+            // el EPUB ya generado tiene el texto antiguo: que se vuelva a generar al abrirlo
+            if (translatedTotal > 0) {
+                removeKey(DOWNLOAD_EPUB_SIZE, id.toString())
+            }
             currentDownloadsMutex.withLock {
                 currentDownloads -= id
             }

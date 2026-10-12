@@ -19,6 +19,7 @@ import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.download.DownloadViewModel
 import com.lagradost.quicknovel.util.Apis
+import com.lagradost.quicknovel.util.DownloadTranslation
 import java.lang.ref.WeakReference
 
 // This is needed to fix downloads, as newer android versions pause network connections in the background
@@ -31,6 +32,9 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
 
         // Id de la novela: permite 1 solo worker de descarga por novela
         const val DOWNLOAD_ID = "download_id"
+
+        // Motor de la descarga con traducción (DownloadTranslation.tag); sin él la descarga es normal
+        const val TRANSLATION = "translation"
 
         const val ID_REFRESH_DOWNLOADS = "REFRESH_DOWNLOADS"
         const val ID_REFRESH_READINGPROGRESS = "REFRESH_READINGPROGRESS"
@@ -108,7 +112,12 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
             )
         }
 
-        private fun startDownload(data: Any, downloadId: Int, context: Context) {
+        private fun startDownload(
+            data: Any,
+            downloadId: Int,
+            context: Context,
+            translation: DownloadTranslation? = null
+        ) {
             getWorkerManager(context).enqueueUniqueWork(
                 ID_DOWNLOAD + downloadId, // Solo 1 descarga por worker: evita duplicar la misma novela
                 ExistingWorkPolicy.KEEP,
@@ -118,6 +127,9 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
                             .putString(ID, ID_DOWNLOAD)
                             .putInt(DATA, insertWork(data))
                             .putInt(DOWNLOAD_ID, downloadId)
+                            .apply {
+                                if (translation != null) putString(TRANSLATION, translation.tag)
+                            }
                             .build()
                     )
                     .build()
@@ -133,12 +145,13 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
 
         fun download(
             load: LoadResponse,
-            context: Context
+            context: Context,
+            translation: DownloadTranslation? = null
         ) {
             if(load.apiName == IMPORT_SOURCE || load.apiName == IMPORT_SOURCE_PDF) {
                 return
             }
-            startDownload(load, generateId(load, load.apiName), context)
+            startDownload(load, generateId(load, load.apiName), context, translation)
         }
     }
 
@@ -173,7 +186,13 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
                 runInForeground()
                 when (val data = popWork(this.workerParams.inputData.getInt(DATA, -1))) {
                     is StreamResponse -> {
-                        BookDownloader2.downloadWorkThread(data, Apis.getApiFromName(data.apiName))
+                        BookDownloader2.downloadWorkThread(
+                            data,
+                            Apis.getApiFromName(data.apiName),
+                            DownloadTranslation.fromTag(
+                                this.workerParams.inputData.getString(TRANSLATION)
+                            )
+                        )
                     }
 
                     is EpubResponse -> {

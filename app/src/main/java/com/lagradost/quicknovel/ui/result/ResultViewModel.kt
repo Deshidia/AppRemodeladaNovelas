@@ -51,6 +51,7 @@ import com.lagradost.quicknovel.ui.download.REVERSE_LAST_UPDATED_SORT
 import com.lagradost.quicknovel.ui.download.SortingMethod
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
+import com.lagradost.quicknovel.util.DownloadTranslation
 import com.lagradost.quicknovel.util.ResultCached
 import com.lagradost.quicknovel.util.TextReplacement
 import com.lagradost.quicknovel.util.TextReplacements
@@ -479,7 +480,7 @@ class ResultViewModel : ViewModel() {
         }
     }
 
-    fun downloadFrom(start: Int?) = viewModelScope.launchSafe {
+    fun downloadFrom(start: Int?, translation: DownloadTranslation? = null) = viewModelScope.launchSafe {
         loadMutex.withLock {
             if (!hasLoaded) return@launchSafe
             val api = repo ?: return@launchSafe
@@ -497,10 +498,14 @@ class ResultViewModel : ViewModel() {
                         }
 
                         // DownloadState.IsDone
-                        else -> BookDownloader2.download(load, context ?: return@launchSafe)
+                        else -> BookDownloader2.download(
+                            load,
+                            context ?: return@launchSafe,
+                            translation
+                        )
                     }
                 } ?: run {
-                    BookDownloader2.download(load, context ?: return@launchSafe)
+                    BookDownloader2.download(load, context ?: return@launchSafe, translation)
                 }
             }
         }

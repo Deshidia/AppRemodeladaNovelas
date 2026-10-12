@@ -49,6 +49,12 @@
     <string name="download">Descargar</string>
     <string name="download_text">Descargar</string>
     <string name="download_from_chapter">Descarga parcial</string>
+    <string name="download_with_ai">Descarga con IA</string>
+    <string name="download_with_deepl">Descarga con DeepL</string>
+    <string name="translation_languages_missing">Primero elige idiomas de origen y destino distintos en los ajustes de traducción del lector</string>
+    <string name="translation_ai_key_missing">Primero añade tu API key de IA (Gemini) en los ajustes de traducción del lector</string>
+    <string name="translation_chapter_failed">No se pudo traducir el capítulo %1$s: %2$s</string>
+    <string name="translation_not_applied">El capítulo %1$s volvió sin traducir. Revisa los idiomas y la API key</string>
     <string name="download_path_key">download_path_key</string>
     <string name="download_path_pref">Ruta de descarga</string>
     <string name="download_started">Descarga iniciada</string>
@@ -346,4 +352,6 @@
     <string name="replace_same_text">Ambos textos son iguales</string>
     <string name="replace_delete">Eliminar sustitución</string>
     <string name="replace_item_empty_value">(eliminar)</string>
+    <string name="user_mark_add">Subrayar</string>
+    <string name="user_mark_remove">Quitar subrayado</string>
 </resources>

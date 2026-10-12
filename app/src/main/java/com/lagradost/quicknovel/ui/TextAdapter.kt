@@ -6,7 +6,10 @@ import android.text.Spannable
 import android.text.SpannableString
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
+import android.view.ActionMode
 import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
 import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -43,6 +46,7 @@ import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.showImage
 import com.lagradost.quicknovel.util.UIHelper.systemFonts
 import com.lagradost.quicknovel.util.toPx
+import com.lagradost.quicknovel.ui.roundedbg.USER_MARK_ANNOTATION
 import io.noties.markwon.image.AsyncDrawable
 import io.noties.markwon.image.AsyncDrawableSpan
 import java.io.File
@@ -163,6 +167,34 @@ fun setHighLightedText(tv: TextView, start: Int, end: Int) {
         logError(t)
     }
 }
+
+/** Pone (sustituyendo cualquier otro) el subrayado del usuario en [start, end) del TextView. */
+fun setUserMarkText(tv: TextView, start: Int, end: Int) {
+    try {
+        val spannable: Spannable = SpannableString(tv.text)
+        val length = spannable.length
+        for (s in spannable.getSpans<android.text.Annotation>(0, length)) {
+            if (s.value == USER_MARK_ANNOTATION) spannable.removeSpan(s)
+        }
+
+        val from = start.coerceIn(0, length)
+        val to = end.coerceIn(0, length)
+        if (to > from) {
+            spannable.setSpan(
+                android.text.Annotation("", USER_MARK_ANNOTATION),
+                from,
+                to,
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        tv.setText(spannable, TextView.BufferType.SPANNABLE)
+    } catch (t: Throwable) {
+        logError(t)
+    }
+}
+
+private const val MENU_USER_MARK_ADD = 0x7501
+private const val MENU_USER_MARK_REMOVE = 0x7502
 
 const val CONFIG_COLOR = 1 shl 0
 const val CONFIG_FONT = 1 shl 1
@@ -500,6 +532,7 @@ class TextAdapter(
         when (item) {
             is TextSpan -> {
                 this.bindText(binding, item, config)
+                this.updateUserMark(binding, item)
                 // because we bind text here we know that it will be cleared and thus
                 // we do not have to update it with null
                 if (currentTTSLine != null)
@@ -669,6 +702,15 @@ class TextAdapter(
 
                     setTextIsSelectable(false) // this is so retarded
 
+                    // Menú de selección: "Subrayar" / "Quitar subrayado". Se fija aquí, de forma
+                    // síncrona, para que el callback siempre corresponda al texto que muestra
+                    // este bind (un post{} podría llegar cuando el holder ya se reutilizó).
+                    if (config.isTextSelectable) {
+                        customSelectionActionModeCallback = createUserMarkCallback(this, obj)
+                    } else if (customSelectionActionModeCallback != null) {
+                        customSelectionActionModeCallback = null
+                    }
+
                     // https://stackoverflow.com/questions/36801486/androidtextisselectable-true-not-working-for-textview-in-recyclerview
                     if (config.isTextSelectable) {
                         post {
@@ -692,6 +734,88 @@ class TextAdapter(
             }
 
             else -> {}
+        }
+    }
+
+    /**
+     * Pinta el subrayado del usuario si cae en este bloque de texto.
+     * Se llama justo después de bindText, que siempre deja en el TextView una copia limpia del
+     * texto, así que no hay nada que quitar cuando no aplica (y no copiamos cada párrafo).
+     */
+    private fun updateUserMark(binding: ViewBinding, span: TextSpan) {
+        if (binding !is SingleTextBinding) return
+        val range = viewModel.userMarkRangeFor(span) ?: return
+        setUserMarkText(binding.root, range.first, range.second)
+    }
+
+    /** Selección actual del TextView, ordenada (el ancla puede estar detrás del final). */
+    private fun selectionRange(tv: TextView): Pair<Int, Int> {
+        val length = tv.text.length
+        val a = tv.selectionStart.coerceIn(0, length)
+        val b = tv.selectionEnd.coerceIn(0, length)
+        return minOf(a, b) to maxOf(a, b)
+    }
+
+    /**
+     * Añade al menú contextual de selección:
+     *  - "Subrayar": deja la selección como el único subrayado del lector (sustituye al anterior).
+     *  - "Quitar subrayado": solo aparece si la selección toca el subrayado actual.
+     */
+    private fun createUserMarkCallback(tv: TextView, span: TextSpan): ActionMode.Callback {
+        return object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                menu.add(Menu.NONE, MENU_USER_MARK_ADD, 0, R.string.user_mark_add)
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                return true
+            }
+
+            // se llama al crearse y cada vez que cambia la selección
+            override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+                val (start, end) = selectionRange(tv)
+                val shouldShowRemove = viewModel.userMarkOverlaps(span, start, end)
+                val hasRemove = menu.findItem(MENU_USER_MARK_REMOVE) != null
+                if (shouldShowRemove == hasRemove) return false
+
+                if (shouldShowRemove) {
+                    menu.add(Menu.NONE, MENU_USER_MARK_REMOVE, 1, R.string.user_mark_remove)
+                        .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                } else {
+                    menu.removeItem(MENU_USER_MARK_REMOVE)
+                }
+                return true
+            }
+
+            override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                when (item.itemId) {
+                    MENU_USER_MARK_ADD -> {
+                        var (start, end) = selectionRange(tv)
+                        val text = tv.text
+                        // sin espacios sueltos a los lados de la frase
+                        while (start < end && text[start].isWhitespace()) start++
+                        while (end > start && text[end - 1].isWhitespace()) end--
+
+                        if (end > start) {
+                            viewModel.setUserMark(
+                                chapterIndex = span.index,
+                                start = span.start + start,
+                                end = span.start + end,
+                                text = text.subSequence(start, end).toString()
+                            )
+                        }
+                        mode.finish()
+                        return true
+                    }
+
+                    MENU_USER_MARK_REMOVE -> {
+                        viewModel.clearUserMark()
+                        mode.finish()
+                        return true
+                    }
+                }
+                return false
+            }
+
+            override fun onDestroyActionMode(mode: ActionMode) {}
         }
     }
 

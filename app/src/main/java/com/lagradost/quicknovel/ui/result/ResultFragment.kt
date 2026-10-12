@@ -25,6 +25,7 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipDrawable
 import com.google.android.material.tabs.TabLayout
 import com.lagradost.quicknovel.CommonActivity
+import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.DownloadState
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainActivity.Companion.navigate
@@ -45,6 +46,8 @@ import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.ui.setRecycledViewPool
+import com.lagradost.quicknovel.util.DownloadTranslation
+import com.lagradost.quicknovel.util.DownloadTranslator
 import com.lagradost.quicknovel.util.ReplaceTiming
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.TextReplacement
@@ -520,6 +523,14 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 viewModel.download()
             }
 
+            R.string.download_with_ai -> {
+                downloadWithTranslation(DownloadTranslation.AI)
+            }
+
+            R.string.download_with_deepl -> {
+                downloadWithTranslation(DownloadTranslation.DEEPL)
+            }
+
             R.string.download_from_chapter -> {
                 val chapters =
                     ((viewModel.loadResponse.value as? Resource.Success)?.value as? StreamResponse)?.data
@@ -575,10 +586,38 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
     }
 
+    /**
+     * Descarga la novela y traduce cada capítulo con los ajustes de traducción del lector.
+     * Si falta algo por configurar se avisa aquí, antes de empezar a descargar.
+     */
+    private fun downloadWithTranslation(translation: DownloadTranslation) {
+        val novel =
+            ((viewModel.loadResponse.value as? Resource.Success)?.value as? StreamResponse)
+                ?: return
+
+        val problem = DownloadTranslator.validate(translation, novel.name)
+        if (problem != null) {
+            showToast(problem)
+            return
+        }
+
+        viewModel.downloadFrom(null, translation)
+    }
+
     private fun getActions(): List<Int>? {
         val items = mutableListOf<Int>()
         val progressState =
             viewModel.downloadState.value ?: return null
+
+        // Se traduce capítulo a capítulo, así que solo sirve para novelas por capítulos (no EPUB)
+        val canTranslate =
+            (viewModel.loadResponse.value as? Resource.Success)?.value is StreamResponse
+        fun addTranslatedDownloads() {
+            if (canTranslate) {
+                items.add(R.string.download_with_ai)
+                items.add(R.string.download_with_deepl)
+            }
+        }
         val canDownload =
             progressState.progress < progressState.total
         val canPartialDownload =
@@ -599,6 +638,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 if (canPartialDownload) {
                     items.add(R.string.download_from_chapter)
                 }
+                addTranslatedDownloads()
             }
 
             DownloadState.IsPending -> {
@@ -612,6 +652,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 if (canPartialDownload) {
                     items.add(R.string.download_from_chapter)
                 }
+                addTranslatedDownloads()
             }
 
             DownloadState.Nothing -> {
@@ -622,6 +663,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 if (canPartialDownload) {
                     items.add(R.string.download_from_chapter)
                 }
+                addTranslatedDownloads()
             }
         }
 
@@ -758,9 +800,14 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     viewModel.downloadOrPause()
                     return@setOnClickListener
                 }
-                if (actions.size == 1) {
-                    doAction(actions[0])
-                } else if (actions.contains(R.string.download) || actions.contains(R.string.pause)) {
+                // Las descargas con traducción son nuevas opciones del menú: no cuentan para
+                // decidir qué hace el toque corto, que se comporta como siempre.
+                val mainActions = actions.filter {
+                    it != R.string.download_with_ai && it != R.string.download_with_deepl
+                }
+                if (mainActions.size == 1) {
+                    doAction(mainActions[0])
+                } else if (mainActions.contains(R.string.download) || mainActions.contains(R.string.pause)) {
                     viewModel.downloadOrPause()
                 } else {
                     v.popupMenu(actions.map { it to it }, null) {
