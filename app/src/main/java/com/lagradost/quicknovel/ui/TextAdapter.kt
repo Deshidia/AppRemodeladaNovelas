@@ -6,11 +6,16 @@ import android.text.Spannable
 import android.text.SpannableString
 import android.text.method.LinkMovementMethod
 import android.util.TypedValue
+import android.annotation.SuppressLint
 import android.view.ActionMode
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
+import kotlin.math.abs
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.text.getSpans
@@ -716,11 +721,17 @@ class TextAdapter(
                         post {
                             setTextIsSelectable(true)
                             movementMethod = LinkMovementMethod.getInstance()
-                            setOnClickListener {
-                                viewModel.switchVisibility()
-                            }
+                            // setTextIsSelectable(true) hace al TextView focusable en modo táctil, y
+                            // View.onTouchEvent usa el PRIMER toque solo para darle el foco SIN
+                            // llamar al onClick (hace falta un segundo toque; además el foco se
+                            // pierde en cada nuevo bind: scroll, cada frase del TTS...). Por eso
+                            // aquí no se usa onClick: el toque simple se detecta a mano y el
+                            // TextView sigue gestionando selección y enlaces con normalidad.
+                            setOnClickListener(null)
+                            setOnTouchListener(tapToggleListener)
                         }
                     } else {
+                        setOnTouchListener(null)
                         movementMethod = LinkMovementMethod.getInstance()
                         setOnClickListener {
                             viewModel.switchVisibility()
@@ -746,6 +757,51 @@ class TextAdapter(
         if (binding !is SingleTextBinding) return
         val range = viewModel.userMarkRangeFor(span) ?: return
         setUserMarkText(binding.root, range.first, range.second)
+    }
+
+    /**
+     * Muestra/oculta el menú del lector con un toque simple, sin pasar por onClick (ver bindText).
+     * Un toque es: dedo abajo y arriba sin moverse más del "touch slop" y antes del tiempo de
+     * pulsación larga, de modo que ni el scroll ni la selección por pulsación larga lo disparan.
+     * Devuelve siempre false para que el TextView siga gestionando selección y enlaces.
+     * Un solo objeto compartido basta: solo hay un gesto de un dedo a la vez.
+     */
+    private val tapToggleListener = object : View.OnTouchListener {
+        private var downX = 0f
+        private var downY = 0f
+        private var downTime = 0L
+        private var isTap = false
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onTouch(v: View, event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    downTime = event.eventTime
+                    isTap = true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    if (isTap) {
+                        val slop = ViewConfiguration.get(v.context).scaledTouchSlop
+                        if (abs(event.x - downX) > slop || abs(event.y - downY) > slop) {
+                            isTap = false
+                        }
+                    }
+                }
+
+                MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> isTap = false
+
+                MotionEvent.ACTION_UP -> {
+                    if (isTap && event.eventTime - downTime < ViewConfiguration.getLongPressTimeout()) {
+                        viewModel.switchVisibility()
+                    }
+                    isTap = false
+                }
+            }
+            return false
+        }
     }
 
     /** Selección actual del TextView, ordenada (el ancla puede estar detrás del final). */

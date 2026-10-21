@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
 import android.media.MediaPlayer
+import android.os.Looper
 import android.speech.tts.Voice
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -505,6 +506,9 @@ class ReadActivityViewModel : ViewModel() {
         lastChangeIndex?.let { setScrollKeys(it) }
         isInApp = false
         leftAppAt = desiredIndex
+        // Si el TTS está activo, al salir del lector la frase que se lee se subraya sola
+        // para guardar el progreso de la lectura.
+        saveTTSProgressAsUserMark()
     }
 
     fun resumedApp() {
@@ -513,6 +517,8 @@ class ReadActivityViewModel : ViewModel() {
 
         leftAppAt = null
         isInApp = false
+        // de vuelta en el lector el subrayado deja de seguir al TTS (ver followTTSWithMark)
+        followTTSWithMark = false
 
         // if we resume the app and the desired index is different from what we are at currently
         // then we scroll to it
@@ -593,7 +599,15 @@ class ReadActivityViewModel : ViewModel() {
     // val textFont: LiveData<String> = _textFont
 
     fun switchVisibility() {
-        _bottomVisibility.postValue(!(_bottomVisibility.value ?: false))
+        val next = !(_bottomVisibility.value ?: false)
+        // postValue deja .value desactualizado hasta que se entrega: dos toggles seguidos (con el
+        // hilo principal ocupado) leerían el mismo valor y uno se perdería. Desde el hilo
+        // principal se asigna directamente.
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            _bottomVisibility.value = next
+        } else {
+            _bottomVisibility.postValue(next)
+        }
     }
 
 
@@ -627,9 +641,53 @@ class ReadActivityViewModel : ViewModel() {
     private val _showOriginalText = MutableLiveData(false)
     val showOriginalTextLive: LiveData<Boolean> = _showOriginalText
 
+    // Fuente de verdad síncrona del toggle: updateReadArea() puede ejecutarse en otro hilo justo
+    // después de cambiarlo y un LiveData.postValue() aún no sería visible para él.
+    @Volatile
+    private var showOriginalText = false
+
     fun toggleShowOriginalText() {
-        _showOriginalText.value = !(_showOriginalText.value ?: false)
-        updateReadArea()
+        val toOriginal = !showOriginalText
+        showOriginalText = toOriginal
+        _showOriginalText.value = toOriginal
+
+        // Los ids de los párrafos dependen de (capítulo, start, end) y esos offsets cambian entre
+        // la versión original y la traducida/sustituida, así que DiffUtil ve una lista nueva y el
+        // RecyclerView pierde su ancla y salta al inicio del capítulo. Por eso se convierte la
+        // posición de lectura a la otra versión y se recoloca explícitamente.
+        val position = desiredIndex
+        ioSafe {
+            if (position != null) {
+                desiredIndex = remapScrollIndexForToggle(position, toOriginal)
+            }
+            updateReadArea(seekToDesired = position != null)
+        }
+    }
+
+    /**
+     * Traslada [from] (posición en la versión que se estaba mostrando) a la versión a la que se
+     * cambia: mismo párrafo (innerIndex, que es estable entre versiones) y mismo punto relativo
+     * dentro de él, ya que el texto sustituido/traducido tiene otra longitud.
+     */
+    private suspend fun remapScrollIndexForToggle(from: ScrollIndex, toOriginal: Boolean): ScrollIndex {
+        val live = (chapterMutex.withLock { chapterData[from.index] } as? Resource.Success<LiveChapterData>)?.value
+            ?: return from
+
+        val oldSpans = if (toOriginal) live.spans else live.originalSpans
+        val newSpans = if (toOriginal) live.originalSpans else live.spans
+
+        val old = oldSpans.firstOrNull { it.innerIndex == from.innerIndex } ?: return from
+        // si el párrafo no existe en la otra versión, el más cercano anterior
+        val new = newSpans.firstOrNull { it.innerIndex == from.innerIndex }
+            ?: newSpans.lastOrNull { it.innerIndex <= from.innerIndex }
+            ?: newSpans.firstOrNull()
+            ?: return from
+
+        val oldLength = (old.end - old.start).coerceAtLeast(1)
+        val fraction = ((from.char - old.start).toFloat() / oldLength).coerceIn(0f, 1f)
+        val newChar = new.start + (fraction * (new.end - new.start)).toInt()
+
+        return ScrollIndex(from.index, new.innerIndex, newChar)
     }
 
 
@@ -645,11 +703,16 @@ class ReadActivityViewModel : ViewModel() {
 
     fun reloadChapter(index: Int) = ioSafe {
         hasExpanded.clear() // will unfuck the rest
-        val notify = chapterMutex.withLock {
-            chapterData[index] is Resource.Failure
+        // La descarga puede tardar (reintentos), y sin ningún indicador parecía que el botón no
+        // hacía nada. Se usa el mismo indicador a pantalla completa que en "Aplicar" y, al
+        // terminar, se vuelve al punto de lectura en vez de quedarse donde caiga la lista.
+        val title = context?.let { ctx ->
+            ctx.getString(R.string.reload_chapter_format)
+                .format(book.getChapterTitle(index).asString(ctx))
         }
-        loadIndividualChapter(index, reload = true, notify = notify)
-        updateReadArea(seekToDesired = false)
+        _loadingStatus.postValue(Resource.Loading(title))
+        loadIndividualChapter(index, reload = true, notify = false, postLoading = true)
+        updateReadArea(seekToDesired = true)
     }
 
     fun reTranslateChapter(index: Int) = ioSafe {
@@ -743,7 +806,7 @@ class ReadActivityViewModel : ViewModel() {
             }
 
             is Resource.Success -> {
-                if (_showOriginalText.value == true) data.value.originalSpans else data.value.spans
+                if (showOriginalText) data.value.originalSpans else data.value.spans
             }
 
             is Resource.Failure -> listOf<SpanDisplay>(
@@ -1154,78 +1217,93 @@ class ReadActivityViewModel : ViewModel() {
             }
 
 
-            var translatedList: List<String>
+            // Avisa al progreso de la UI y a la notificación del servicio en primer plano
+            suspend fun reportProgress(chapter: Int, progress: Int, total: Int) {
+                ReaderTranslationKeepAlive.update(
+                    book.getChapterTitle(chapter).asStringNull(context) ?: book.title(),
+                    progress,
+                    total
+                )
+                loading.invoke(Triple(chapter, progress, total))
+            }
 
-            // --- Online mode ---
-            if (currentSettings.useOnlineTranslation) {
-                translatedList = translateSkippingBlank(
-                    sourceLines,
-                    beforeRules.isNotEmpty()
-                ) { lines ->
-                    GoogleTranslateOnline.onlineTranslate(
-                        lines,
+            // Mientras se traduce de verdad (no con la caché) mantenemos el proceso vivo con un
+            // servicio en primer plano: sin él Android congela la red al salir de la app y la
+            // traducción se queda parada hasta volver. El finally garantiza que siempre se libera.
+            ReaderTranslationKeepAlive.begin(book.title())
+            val translatedList: List<String> = try {
+                // --- Online mode ---
+                if (currentSettings.useOnlineTranslation) {
+                    translateSkippingBlank(
+                        sourceLines,
+                        beforeRules.isNotEmpty()
+                    ) { lines ->
+                        GoogleTranslateOnline.onlineTranslate(
+                            lines,
+                            currentSettings.from,
+                            currentSettings.to
+                        ) { progress, total ->
+                            reportProgress(spans[0].index, progress, total)
+                        }
+                    }
+                }
+
+                // --- DeepL mode (ya omite los párrafos vacíos y devuelve el mismo tamaño) ---
+                else if (currentSettings.useDeepLTranslation) {
+                    DeepLTranslate.deeplTranslate(
+                        sourceLines,
+                        mlDeepLApiKey,
                         currentSettings.from,
                         currentSettings.to
                     ) { progress, total ->
-                        loading.invoke(Triple(spans[0].index, progress, total))
+                        reportProgress(spans[0].index, progress, total)
                     }
                 }
 
-            }
-
-            // --- DeepL mode (ya omite los párrafos vacíos y devuelve el mismo tamaño) ---
-            else if (currentSettings.useDeepLTranslation) {
-                translatedList = DeepLTranslate.deeplTranslate(
-                    sourceLines,
-                    mlDeepLApiKey,
-                    currentSettings.from,
-                    currentSettings.to
-                ) { progress, total ->
-                    loading.invoke(Triple(spans[0].index, progress, total))
-                }
-            }
-
-            // --- AI mode ---
-            else if (currentSettings.useAiTranslation) {
-                translatedList = translateSkippingBlank(
-                    sourceLines,
-                    beforeRules.isNotEmpty()
-                ) { lines ->
-                    GeminiTranslate.geminiTranslate(
-                        lines,
-                        mlAiApiKey,
-                        mlAiModel,
-                        currentSettings.from,
-                        currentSettings.to,
-                        mlAiPrompt,
-                        thinkingLevel = GeminiThinkingLevel.fromName(mlAiThinkingLevel),
-                        temperature = mlAiTemperature,
-                        topP = mlAiTopP,
-                        topK = mlAiTopK,
-                        maxRequestsPerMinute = mlAiMaxRequestsPerMinute,
-                        backupModel = mlAiBackupModel,
-                        maxCharsPerRequest = mlAiMaxCharsPerRequest
-                    ) { progress, total ->
-                        loading.invoke(Triple(spans[0].index, progress, total))
+                // --- AI mode ---
+                else if (currentSettings.useAiTranslation) {
+                    translateSkippingBlank(
+                        sourceLines,
+                        beforeRules.isNotEmpty()
+                    ) { lines ->
+                        GeminiTranslate.geminiTranslate(
+                            lines,
+                            mlAiApiKey,
+                            mlAiModel,
+                            currentSettings.from,
+                            currentSettings.to,
+                            mlAiPrompt,
+                            thinkingLevel = GeminiThinkingLevel.fromName(mlAiThinkingLevel),
+                            temperature = mlAiTemperature,
+                            topP = mlAiTopP,
+                            topK = mlAiTopK,
+                            maxRequestsPerMinute = mlAiMaxRequestsPerMinute,
+                            backupModel = mlAiBackupModel,
+                            maxCharsPerRequest = mlAiMaxCharsPerRequest
+                        ) { progress, total ->
+                            reportProgress(spans[0].index, progress, total)
+                        }
                     }
                 }
-            }
 
-            // --- Offline mode ---
-            else {
-                val translator = mlTranslator
-                    ?: return applyReplacementsWithoutTranslation(spans, beforeRules + afterRules)
-                        ?: (text to spans)
-                translatedList = spans.mapIndexed { i,  span ->
-                    loading.invoke(Triple(span.index, i, spans.size))
-                    val line = sourceLines[i]
-                    if (line.isBlank()) return@mapIndexed line
-                    try {
-                        Tasks.await(translator.translate(line))
-                    } catch (t: ExecutionException) {
-                        throw t.cause ?: t
+                // --- Offline mode ---
+                else {
+                    val translator = mlTranslator
+                        ?: return applyReplacementsWithoutTranslation(spans, beforeRules + afterRules)
+                            ?: (text to spans)
+                    spans.mapIndexed { i,  span ->
+                        reportProgress(span.index, i, spans.size)
+                        val line = sourceLines[i]
+                        if (line.isBlank()) return@mapIndexed line
+                        try {
+                            Tasks.await(translator.translate(line))
+                        } catch (t: ExecutionException) {
+                            throw t.cause ?: t
+                        }
                     }
                 }
+            } finally {
+                ReaderTranslationKeepAlive.end()
             }
 
             // traducción "pura" (sin sustituciones "después"): es lo que se guarda en caché
@@ -1579,16 +1657,64 @@ class ReadActivityViewModel : ViewModel() {
     /** Sustituye el subrayado actual de esta novela por este. */
     fun setUserMark(chapterIndex: Int, start: Int, end: Int, text: String) {
         if (end <= start || text.isEmpty()) return
-        val mark = ReaderMark(
-            bookTitle = book.title(),
-            chapterIndex = chapterIndex,
-            start = start,
-            end = end,
-            text = text
+        storeUserMark(
+            ReaderMark(
+                bookTitle = book.title(),
+                chapterIndex = chapterIndex,
+                start = start,
+                end = end,
+                text = text
+            )
         )
+    }
+
+    private fun storeUserMark(mark: ReaderMark) {
+        if (userMarkValue == mark) return
         setKey(EPUB_USER_MARK, book.title(), mark)
         userMarkValue = mark
         _userMark.postValue(mark)
+    }
+
+    /**
+     * Frase que el TTS está leyendo ahora mismo, ya convertida en marca (null si no hay TTS).
+     * La actualiza el hilo del TTS en cada frase.
+     */
+    @Volatile
+    private var ttsProgressMark: ReaderMark? = null
+
+    /**
+     * true desde que el usuario sale del lector con el TTS activo hasta que vuelve. Mientras dure,
+     * el TTS (que sigue leyendo en segundo plano) mueve el subrayado a cada frase nueva para que
+     * el progreso guardado no se quede atrás.
+     */
+    @Volatile
+    private var followTTSWithMark = false
+
+    /** Convierte la línea [line] del TTS en marca, sin espacios sueltos a los lados. */
+    private fun markForTTSLine(line: TTSHelper.TTSLine, text: CharSequence): ReaderMark? {
+        var start = line.startChar.coerceAtLeast(0)
+        var end = line.endChar.coerceAtMost(text.length)
+        while (start < end && text[start].isWhitespace()) start++
+        while (end > start && text[end - 1].isWhitespace()) end--
+        if (end <= start) return null
+        return ReaderMark(
+            bookTitle = book.title(),
+            chapterIndex = line.index,
+            start = start,
+            end = end,
+            text = text.subSequence(start, end).toString()
+        )
+    }
+
+    /**
+     * Se llama al salir del lector. Si el TTS está leyendo (o en pausa), subraya la frase actual,
+     * sustituyendo al subrayado anterior, y mantiene el subrayado al día mientras el TTS siga
+     * leyendo fuera del lector. Si el TTS está parado no hace nada.
+     */
+    fun saveTTSProgressAsUserMark() {
+        if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) return
+        followTTSWithMark = true
+        ttsProgressMark?.let { storeUserMark(it) }
     }
 
     /** Borra el subrayado de forma permanente. */
@@ -1829,6 +1955,10 @@ class ReadActivityViewModel : ViewModel() {
                 // Si el usuario dejó una frase subrayada, el TTS empieza exactamente por ella y,
                 // cuando termina de leerla, el subrayado se borra de forma permanente.
                 var markTarget: TTSMarkTarget? = resolveUserMarkForTTS()
+                // texto "rendered" del capítulo que se está leyendo (los offsets de las líneas son suyos)
+                var currentRendered: CharSequence = ""
+                // última marca de progreso escrita por el TTS mientras se estaba fuera del lector
+                var followedMark: ReaderMark? = null
 
                 let {
                     val target = markTarget
@@ -1881,6 +2011,7 @@ class ReadActivityViewModel : ViewModel() {
                             }
 
                             is Resource.Success -> {
+                                currentRendered = currentData.value.rendered
                                 currentData.value.ttsLines
                             }
                         }
@@ -1955,6 +2086,15 @@ class ReadActivityViewModel : ViewModel() {
                         }
 
 
+                        // progreso: esta frase es por donde va la lectura. Si el usuario está fuera
+                        // del lector, además se subraya para que quede guardado.
+                        val progress = markForTTSLine(line, currentRendered)
+                        ttsProgressMark = progress
+                        if (progress != null && followTTSWithMark) {
+                            storeUserMark(progress)
+                            followedMark = progress
+                        }
+
                         // post visual
                         _ttsLine.postValue(line)
 
@@ -1991,6 +2131,18 @@ class ReadActivityViewModel : ViewModel() {
                         if (isPauseDuration > 0 && pendingTTSSkip == 0) {
                             notify()
                             continue
+                        }
+
+                        if (followTTSWithMark) {
+                            // el subrayado lo lleva el progreso, no hay que borrar el original
+                            markTarget = null
+                        } else {
+                            // el usuario volvió al lector con el TTS en marcha: el subrayado de
+                            // progreso pasa a ser uno normal y se borra al dejar atrás su frase
+                            followedMark?.let {
+                                markTarget = TTSMarkTarget(it, it.chapterIndex, it.start, it.end)
+                                followedMark = null
+                            }
                         }
 
                         // Dejamos atrás la última frase de la marca (por haberla leído entera o
@@ -2045,6 +2197,8 @@ class ReadActivityViewModel : ViewModel() {
             )
             ttsSession.interruptTTS()
             ttsSession.unregister()
+            ttsProgressMark = null
+            followTTSWithMark = false
             _ttsLine.postValue(null)
             ttsTimeRemaining.postValue(null)
         }

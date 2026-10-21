@@ -53,8 +53,10 @@ import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.DownloadTranslation
 import com.lagradost.quicknovel.util.ResultCached
+import com.lagradost.quicknovel.util.ReplacementMergeResult
 import com.lagradost.quicknovel.util.TextReplacement
 import com.lagradost.quicknovel.util.TextReplacements
+import com.lagradost.quicknovel.util.mergeReplacementRules
 import com.lagradost.quicknovel.CommonActivity.showToast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -271,6 +273,23 @@ class ResultViewModel : ViewModel() {
         }
         TextReplacements.set(novel, list)
         replacements.postValue(list)
+    }
+
+    /** Nombre de la novela cuyas reglas se están mostrando (null si aún no se ha cargado). */
+    fun currentReplacementsNovel(): String? = replacementsNovel
+
+    /**
+     * Mezcla [incoming] (reglas traídas de otras novelas) con las de esta novela, sin duplicar.
+     * Devuelve null si todavía no hay novela cargada.
+     */
+    fun mergeReplacements(incoming: List<TextReplacement>): ReplacementMergeResult? {
+        val novel = replacementsNovel ?: return null
+        val result = mergeReplacementRules(replacements.value ?: emptyList(), incoming)
+        if (result.changed) {
+            TextReplacements.set(novel, result.rules)
+            replacements.postValue(result.rules)
+        }
+        return result
     }
 
     fun deleteReplacement(index: Int) {

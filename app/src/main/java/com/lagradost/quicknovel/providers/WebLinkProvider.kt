@@ -362,7 +362,16 @@ class WebLinkProvider : MainAPI() {
                 }
             }
 
-            /** Devuelve y borra la página guardada (un solo uso, así "recargar capítulo" siempre va a la red). */
+            /** Borra la página guardada de [url], si hay (lo usa "recargar capítulo"). */
+            fun discard(url: String) {
+                try {
+                    file(url)?.delete()
+                } catch (e: Exception) {
+                    // la caché es opcional
+                }
+            }
+
+            /** Devuelve y borra la página guardada (un solo uso). Para recargar hay que usar [discard]. */
             fun take(url: String): String? = try {
                 file(url)?.takeIf { it.exists() && System.currentTimeMillis() - it.lastModified() < TTL_MS }
                     ?.let { f -> f.readText().also { f.delete() } }
@@ -692,6 +701,19 @@ class WebLinkProvider : MainAPI() {
             if (prefetched?.first == url) prefetched = null
             return cached
         }
+        return fetchPage(url).html
+    }
+
+    /**
+     * "Recargar capítulo": siempre va a la red. Hay que descartar antes las tres copias que
+     * [loadHtml] y [fetchPage] reutilizan, porque cualquiera de ellas puede ser anterior a un cambio
+     * en la web (p. ej. un capítulo premium que pasa a ser gratuito): la guardada al recorrer la
+     * cadena (hasta 24 h), la última página descargada y la adivinada al buscar el siguiente.
+     */
+    override suspend fun reloadHtml(url: String): String? {
+        PageCache.discard(url)
+        if (prefetched?.first == url) prefetched = null
+        if (guessedBody?.first == url) guessedBody = null
         return fetchPage(url).html
     }
 }

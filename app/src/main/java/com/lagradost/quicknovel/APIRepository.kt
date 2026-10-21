@@ -245,9 +245,10 @@ class APIRepository(val api: MainAPI) {
     /**
      * Automatically strips adsbygoogle
      * */
-    suspend fun loadHtml(url: String): String? {
+    suspend fun loadHtml(url: String, forceReload: Boolean = false): String? {
         return try {
-            api.loadHtml(api.fixUrl(url))?.removeAds()
+            val fixed = api.fixUrl(url)
+            (if (forceReload) api.reloadHtml(fixed) else api.loadHtml(fixed))?.removeAds()
         } catch (e: Exception) {
             logError(e)
             null

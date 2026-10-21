@@ -77,6 +77,13 @@ abstract class MainAPI {
         throw NotImplementedError()
     }
 
+    /**
+     * Igual que [loadHtml], pero garantizando que la página se descarga de nuevo (el usuario ha
+     * pulsado "Recargar capítulo"). Los proveedores que guardan páginas en caché deben
+     * sobrescribirla para saltarse esa caché; el resto no necesita hacer nada.
+     */
+    open suspend fun reloadHtml(url: String): String? = loadHtml(url)
+
     /*open suspend fun loadEpub(link: DownloadLinkType): ByteArray {
         if (link is DownloadLink) {
             return MainActivity.app.get(

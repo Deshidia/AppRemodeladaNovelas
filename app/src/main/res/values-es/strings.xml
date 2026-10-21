@@ -330,7 +330,7 @@
 
     <!-- Pestaña Sustituir -->
     <string name="replace_tab">Sustituir</string>
-    <string name="replace_description">Sustituye palabras o frases en el texto de esta novela. Corrige errores antes de traducir, o adapta términos después de traducir. Deja el segundo campo vacío para eliminar el término.</string>
+    <string name="replace_description">Sustituye palabras o frases en el texto de esta novela. Corrige errores antes de traducir, o adapta términos después de traducir. Deja el segundo campo vacío para eliminar el término. Si varias novelas comparten universo, copia las sustituciones de una a otra en vez de repetirlas.</string>
     <string name="replace_original_hint">Término original</string>
     <string name="replace_replacement_hint">Sustituir por</string>
     <string name="replace_when">Cuándo sustituir</string>
@@ -346,4 +346,19 @@
     <string name="replace_same_text">Ambos textos son iguales</string>
     <string name="replace_delete">Eliminar sustitución</string>
     <string name="replace_item_empty_value">(eliminar)</string>
+    <string name="replace_pick_search_hint">Buscar en la biblioteca…</string>
+    <string name="replace_pick_no_results">Ninguna novela de la biblioteca coincide</string>
+    <string name="replace_copy_to">Copiar a…</string>
+    <string name="replace_import_from">Importar de…</string>
+    <string name="replace_copy_title">Copiar estas sustituciones a (biblioteca)</string>
+    <string name="replace_import_title">Importar sustituciones de (biblioteca)</string>
+    <string name="replace_copy_no_novels">No hay otras novelas en la biblioteca a las que copiar</string>
+    <string name="replace_import_no_novels">Ninguna otra novela de la biblioteca tiene sustituciones guardadas</string>
+    <plurals name="replace_copy_done">
+        <item quantity="one">Sustituciones copiadas a %1$d novela</item>
+        <item quantity="other">Sustituciones copiadas a %1$d novelas</item>
+    </plurals>
+    <string name="replace_copy_nothing_new">Esas novelas ya tenían las mismas sustituciones</string>
+    <string name="replace_import_done">Importadas: %1$d nuevas, %2$d actualizadas</string>
+    <string name="replace_import_nothing_new">Esta novela ya tenía esas sustituciones</string>
 </resources>

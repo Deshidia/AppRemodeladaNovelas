@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/primaryBlackBackground"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/replace_pick_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="10dp"
+        android:paddingStart="?android:attr/listPreferredItemPaddingStart"
+        android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
+        android:textColor="?attr/textColor"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        tools:text="Copiar estas sustituciones a" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <ListView
+            android:id="@+id/replace_pick_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            tools:listitem="@layout/sort_bottom_single_choice" />
+
+        <TextView
+            android:id="@+id/replace_pick_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:padding="20dp"
+            android:text="@string/replace_pick_no_results"
+            android:textColor="?attr/grayTextColor"
+            android:textSize="14sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <androidx.appcompat.widget.SearchView
+        android:id="@+id/replace_pick_search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="10dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/search_background"
+        app:iconifiedByDefault="false"
+        app:queryBackground="@color/transparent"
+        app:queryHint="@string/replace_pick_search_hint"
+        app:searchIcon="@drawable/search_icon" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginVertical="6dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/replace_pick_apply"
+            style="@style/WhiteButton"
+            android:layout_width="wrap_content"
+            android:text="@string/sort_apply" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/replace_pick_cancel"
+            style="@style/BlackButton"
+            android:layout_width="wrap_content"
+            android:text="@string/sort_cancel" />
+    </LinearLayout>
+</LinearLayout>

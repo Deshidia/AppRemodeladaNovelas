@@ -795,6 +795,35 @@ Translator: Rainbow Turtle" />
                                 android:alpha="0.5"
                                 android:background="?attr/textColor" />
 
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginBottom="10dp"
+                                android:orientation="horizontal">
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/replace_copy_to_btn"
+                                    style="@style/BlackButton"
+                                    android:layout_width="0dp"
+                                    android:layout_marginStart="0dp"
+                                    android:layout_marginEnd="5dp"
+                                    android:layout_weight="1"
+                                    android:text="@string/replace_copy_to"
+                                    app:icon="@drawable/ic_baseline_content_copy_24"
+                                    app:iconSize="18dp" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/replace_import_btn"
+                                    style="@style/BlackButton"
+                                    android:layout_width="0dp"
+                                    android:layout_marginStart="0dp"
+                                    android:layout_marginEnd="0dp"
+                                    android:layout_weight="1"
+                                    android:text="@string/replace_import_from"
+                                    app:icon="@drawable/ic_baseline_get_app_24"
+                                    app:iconSize="18dp" />
+                            </LinearLayout>
+
                             <TextView
                                 android:id="@+id/replace_empty"
                                 android:layout_width="match_parent"

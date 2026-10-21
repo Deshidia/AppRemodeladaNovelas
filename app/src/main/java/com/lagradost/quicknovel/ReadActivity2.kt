@@ -702,6 +702,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
     override fun onDestroy() {
+        // si se sale del lector con el TTS activo, la frase actual queda subrayada (progreso)
+        viewModel.saveTTSProgressAsUserMark()
         viewModel.stopTTS()
         this.unregisterReceiver(mBatInfoReceiver)
         if (readActivity === this) {

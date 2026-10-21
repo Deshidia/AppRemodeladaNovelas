@@ -533,7 +533,13 @@ object BookDownloader2Helper {
         // así que la caché se identifica por la URL del capítulo y no por su posición.
         val fileIndex = if (meta.apiName == WebLinkProvider.NAME) chapter.url.hashCode() else index
         val path = getFilePath(meta, fileIndex)
-        downloadIndividualChapter(path, getApiFromName(meta.apiName), chapter, forceReload)
+        val downloaded =
+            downloadIndividualChapter(path, getApiFromName(meta.apiName), chapter, forceReload)
+        // Al recargar, si la descarga falla el archivo viejo sigue ahí: leerlo sin avisar haría
+        // creer que se ha recargado cuando en realidad se muestra lo mismo de antes.
+        if (forceReload && !downloaded) {
+            throw ErrorLoadingException("Could not reload the chapter")
+        }
         return getChapter(path, index, getStripHtml(), false)
     }
 
@@ -668,7 +674,7 @@ object BookDownloader2Helper {
                 api.api.rateLimitMutex.lock()
             }
             try {
-                val page = api.loadHtml(data.url)
+                val page = api.loadHtml(data.url, forceReload)
 
                 if (!page.isNullOrBlank()) {
                     rFile.createNewFile() // only create the file when actually needed
