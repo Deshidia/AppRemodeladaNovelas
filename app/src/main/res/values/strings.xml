@@ -366,7 +366,7 @@
 
     <!-- Replace tab -->
     <string name="replace_tab">Replace</string>
-    <string name="replace_description">Replace words or phrases in the text of this novel. Fix mistakes before translating, or adapt terms after translating. Leave the second field empty to remove the term.</string>
+    <string name="replace_description">Replace words or phrases in the text of this novel. Fix mistakes before translating, or adapt terms after translating. Leave the second field empty to remove the term. If several novels share a universe, copy the replacements from one to another instead of retyping them.</string>
     <string name="replace_original_hint">Original term</string>
     <string name="replace_replacement_hint">Replace with</string>
     <string name="replace_when">When to replace</string>
@@ -382,6 +382,21 @@
     <string name="replace_same_text">Both texts are identical</string>
     <string name="replace_delete">Delete replacement</string>
     <string name="replace_item_empty_value">(remove)</string>
+    <string name="replace_pick_search_hint">Search your library…</string>
+    <string name="replace_pick_no_results">No library novel matches</string>
+    <string name="replace_copy_to">Copy to…</string>
+    <string name="replace_import_from">Import from…</string>
+    <string name="replace_copy_title">Copy these replacements to (library)</string>
+    <string name="replace_import_title">Import replacements from (library)</string>
+    <string name="replace_copy_no_novels">There are no other novels in your library to copy to</string>
+    <string name="replace_import_no_novels">No other novel in your library has saved replacements</string>
+    <plurals name="replace_copy_done">
+        <item quantity="one">Replacements copied to %1$d novel</item>
+        <item quantity="other">Replacements copied to %1$d novels</item>
+    </plurals>
+    <string name="replace_copy_nothing_new">Those novels already had the same replacements</string>
+    <string name="replace_import_done">Imported: %1$d new, %2$d updated</string>
+    <string name="replace_import_nothing_new">This novel already had those replacements</string>
 
     <!-- Search by original title / migrate to another provider -->
     <string name="migrate_title">Duplicate or migrate?</string>
@@ -426,4 +441,7 @@
     <string name="import_epubs">Import books</string>
     <string name="user_mark_add">Underline</string>
     <string name="user_mark_remove">Remove underline</string>
+    <string name="translation_channel_name">Chapter translation</string>
+    <string name="translation_channel_description">Shown while the reader translates a chapter in the background</string>
+    <string name="translation_in_background">Translating in the background</string>
 </resources>

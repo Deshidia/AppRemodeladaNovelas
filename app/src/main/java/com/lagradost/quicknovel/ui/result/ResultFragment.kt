@@ -49,11 +49,13 @@ import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.ui.search.SearchFragment
 import com.lagradost.quicknovel.ui.setRecycledViewPool
+import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.DownloadTranslation
 import com.lagradost.quicknovel.util.DownloadTranslator
 import com.lagradost.quicknovel.util.ReplaceTiming
 import com.lagradost.quicknovel.util.SettingsHelper.getRating
 import com.lagradost.quicknovel.util.TextReplacement
+import com.lagradost.quicknovel.util.TextReplacements
 import com.lagradost.quicknovel.util.UIHelper
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
@@ -177,6 +179,9 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 hideKeyboard()
             }
 
+            replaceCopyToBtn.setOnClickListener { showCopyReplacementsDialog() }
+            replaceImportBtn.setOnClickListener { showImportReplacementsDialog() }
+
             replaceAddBtn.setOnClickListener {
                 val original = replaceOriginalInput.text?.toString().orEmpty()
                 // un salto de línea desalinearía los párrafos al traducir
@@ -210,11 +215,105 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
     }
 
+    /**
+     * "Copiar a…": elige una o varias novelas de la biblioteca (con buscador) y les añade las
+     * sustituciones de esta ficha. Útil para novelas del mismo universo (p. ej. DanMachi y
+     * Sword Oratoria) que comparten nombres.
+     */
+    private fun showCopyReplacementsDialog() {
+        val current = viewModel.currentReplacementsNovel() ?: return
+        val rules = viewModel.replacements.value.orEmpty()
+        if (rules.isEmpty()) return
+
+        // leer la biblioteca recorre muchas claves: fuera del hilo principal
+        ioSafe {
+            val withRules = TextReplacements.novelsWithRules()
+            val entries = TextReplacements.libraryNovelNames()
+                .filter { it != current }
+                .sortedWith(String.CASE_INSENSITIVE_ORDER)
+                .map { name ->
+                    // entre paréntesis, cuántas sustituciones tiene ya cada novela
+                    NovelPickerEntry(name, withRules[name]?.let { "$name ($it)" } ?: name)
+                }
+
+            val act = activity ?: return@ioSafe
+            act.runOnUiThread {
+                if (entries.isEmpty()) {
+                    showToast(R.string.replace_copy_no_novels)
+                    return@runOnUiThread
+                }
+                act.showNovelPickerDialog(
+                    act.getString(R.string.replace_copy_title),
+                    entries
+                ) { targets ->
+                    if (targets.isEmpty()) return@showNovelPickerDialog
+
+                    val changed = TextReplacements.copyTo(targets, rules)
+                    if (changed == 0) {
+                        showToast(R.string.replace_copy_nothing_new)
+                    } else {
+                        showToast(
+                            act.resources.getQuantityString(
+                                R.plurals.replace_copy_done, changed, changed
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * "Importar de…": trae a esta ficha las sustituciones de otras novelas de la biblioteca que
+     * ya las tengan.
+     */
+    private fun showImportReplacementsDialog() {
+        val current = viewModel.currentReplacementsNovel() ?: return
+
+        ioSafe {
+            val counts = TextReplacements.novelsWithRules()
+            val entries = TextReplacements.libraryNovelNames()
+                .filter { it != current && it in counts }
+                .sortedWith(String.CASE_INSENSITIVE_ORDER)
+                .map { name -> NovelPickerEntry(name, "$name (${counts[name]})") }
+
+            val act = activity ?: return@ioSafe
+            act.runOnUiThread {
+                if (entries.isEmpty()) {
+                    showToast(R.string.replace_import_no_novels)
+                    return@runOnUiThread
+                }
+                act.showNovelPickerDialog(
+                    act.getString(R.string.replace_import_title),
+                    entries
+                ) { sources ->
+                    val incoming = sources.flatMap { TextReplacements.get(it) }
+                    if (incoming.isEmpty()) return@showNovelPickerDialog
+
+                    val result = viewModel.mergeReplacements(incoming)
+                        ?: return@showNovelPickerDialog
+                    if (result.changed) {
+                        showToast(
+                            act.getString(
+                                R.string.replace_import_done, result.added, result.updated
+                            )
+                        )
+                    } else {
+                        showToast(R.string.replace_import_nothing_new)
+                    }
+                }
+            }
+        }
+    }
+
     private fun renderReplacements(binding: FragmentResultBinding, rules: List<TextReplacement>) {
         binding.apply {
             replaceList.removeAllViews()
             replaceEmpty.isVisible = rules.isEmpty()
             replaceSavedNote.isVisible = rules.isNotEmpty()
+            // sin reglas no hay nada que copiar
+            replaceCopyToBtn.isEnabled = rules.isNotEmpty()
+            replaceCopyToBtn.alpha = if (rules.isEmpty()) 0.4f else 1f
 
             rules.forEachIndexed { index, rule ->
                 val item = ResultReplaceItemBinding.inflate(layoutInflater, replaceList, false)
