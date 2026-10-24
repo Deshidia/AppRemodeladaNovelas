@@ -1,5 +1,6 @@
 package com.lagradost.quicknovel.ui.result
 
+import android.app.Activity
 import android.content.Context
 import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
@@ -15,8 +16,12 @@ import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_CHAPTER
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_READ_AT
 import com.lagradost.quicknovel.EPUB_CURRENT_POSITION_SCROLL_CHAR
 import com.lagradost.quicknovel.HISTORY_FOLDER
+import com.lagradost.quicknovel.MainActivity.Companion.navigate
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.RESULT_BOOKMARK
 import com.lagradost.quicknovel.ui.LibraryListManager
+import com.lagradost.quicknovel.ui.search.SearchFragment
+import com.lagradost.quicknovel.util.ResultCached
 
 /**
  * La novela "de origen" cuando se busca la misma obra en otros proveedores (pulsación larga en el
@@ -54,6 +59,38 @@ data class MigrationSource(
 }
 
 object NovelMigration {
+
+    /**
+     * Título original (sin traducir) guardado para la novela [id], sea de la biblioteca o del
+     * historial. Sirve para las tarjetas que se abren sin cargar la ficha (p. ej. cuando la web
+     * no responde). Null si no hay nada guardado o la novela no se tradujo.
+     */
+    fun savedOriginalName(id: Int): String? {
+        val key = id.toString()
+        return (getKey<ResultCached>(RESULT_BOOKMARK, key)?.originalName
+            ?: getKey<ResultCached>(HISTORY_FOLDER, key)?.originalName)
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Abre la búsqueda avanzada con [originalTitle] (el título SIN traducir, que es el que usan
+     * las fuentes), recordando [source] como novela de origen por si luego se migra a otra
+     * fuente. Devuelve false si no se pudo abrir (sin actividad o consulta demasiado corta).
+     */
+    fun searchByOriginalTitle(
+        activity: Activity?,
+        originalTitle: String,
+        source: MigrationSource?
+    ): Boolean {
+        val query = originalTitle.trim()
+        // SearchViewModel ignora las consultas de un solo carácter
+        if (query.length <= 1 || activity == null) return false
+        activity.navigate(
+            R.id.navigation_search,
+            SearchFragment.newInstance(query, source)
+        )
+        return true
+    }
 
     /** Último capítulo leído de la novela [novelName] (1 = el primero), o 0 si no hay progreso. */
     fun lastChapterRead(novelName: String): Int {

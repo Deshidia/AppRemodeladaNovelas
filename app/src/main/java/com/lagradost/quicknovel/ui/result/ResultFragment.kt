@@ -47,7 +47,6 @@ import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
-import com.lagradost.quicknovel.ui.search.SearchFragment
 import com.lagradost.quicknovel.ui.setRecycledViewPool
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.DownloadTranslation
@@ -139,12 +138,10 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
      * fuentes), recordando esta novela como origen por si luego se migra a otra fuente.
      */
     private fun searchByOriginalTitle(res: LoadResponse) {
-        val query = res.untranslatedName.trim()
-        // SearchViewModel ignora las consultas de un solo carácter
-        if (query.length <= 1) return
-        activity?.navigate(
-            R.id.navigation_search,
-            SearchFragment.newInstance(query, viewModel.currentMigrationSource())
+        NovelMigration.searchByOriginalTitle(
+            activity,
+            res.untranslatedName,
+            viewModel.currentMigrationSource()
         )
     }
 

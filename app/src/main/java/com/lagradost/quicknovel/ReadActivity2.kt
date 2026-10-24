@@ -1266,12 +1266,31 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             bottomSheetDialog.setContentView(bindingSettings.root)
 
             //Create and Order tabs
-            val tabsToViews = listOf(
+            val tabsToViews = mutableListOf(
                 R.string.read_display_settings to bindingSettings.tabSettingsContainer,     // Tab 0 — Settings
                 R.string.tab_translation to bindingSettings.tabTranslationContainer,  // Tab 1 — Translation
                 R.string.tts_voice to bindingSettings.tabVoiceContainer,        // Tab 2 — Voice
                 R.string.read_text_size to bindingSettings.tabTextContainer,         // Tab 3 — Text
             )
+
+            // Tab 4 — Replace: las mismas sustituciones que la ficha de la novela, pero accesibles
+            // desde el lector (también para EPUBs de Descargas, que no tienen ficha). Se guardan
+            // con el título del libro abierto. Los cambios se aplican una sola vez al cerrar los
+            // ajustes, para no retraducir tras cada regla.
+            val replaceNovel = viewModel.replacementsNovelName()
+            var replacementsChanged = false
+            if (replaceNovel != null) {
+                ReadReplaceTab(this, bindingSettings, replaceNovel) {
+                    replacementsChanged = true
+                }.setup()
+                tabsToViews.add(R.string.replace_tab to bindingSettings.tabReplaceContainer)
+            }
+            bottomSheetDialog.setOnDismissListener {
+                if (replacementsChanged) {
+                    replacementsChanged = false
+                    viewModel.reapplyReplacements()
+                }
+            }
             tabsToViews.forEachIndexed { index, (resId, view) ->
                 bindingSettings.readSettingsTabs.addTab(bindingSettings.readSettingsTabs.newTab().setText(resId))
                 view.isVisible = index == 0

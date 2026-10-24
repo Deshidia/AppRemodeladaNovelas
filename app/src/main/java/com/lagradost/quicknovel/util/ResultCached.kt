@@ -17,7 +17,10 @@ data class ResultCached(
     val rating : Int?,
     val totalChapters : Int,
     val cachedTime : Long, // milliseconds
-    val synopsis : String? = null
+    val synopsis : String? = null,
+    /** Título original de la fuente (sin traducir), para poder buscar la novela en otros
+     * proveedores sin tener que cargar su ficha. Null si no se tradujo o es una entrada antigua. */
+    val originalName : String? = null
 ) {
     val image : UiImage? get() = img(poster)
 

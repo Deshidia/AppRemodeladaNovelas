@@ -397,6 +397,9 @@
     <string name="replace_copy_nothing_new">Those novels already had the same replacements</string>
     <string name="replace_import_done">Imported: %1$d new, %2$d updated</string>
     <string name="replace_import_nothing_new">This novel already had those replacements</string>
+    <string name="replace_reader_novel">Replacements for: %s</string>
+    <string name="replace_reader_note">When you close the settings, the changes are applied to the chapters that are open. They are saved for this book, so they also apply when you open it again.</string>
+    <string name="replace_applying">Applying replacements</string>
 
     <!-- Search by original title / migrate to another provider -->
     <string name="migrate_title">Duplicate or migrate?</string>

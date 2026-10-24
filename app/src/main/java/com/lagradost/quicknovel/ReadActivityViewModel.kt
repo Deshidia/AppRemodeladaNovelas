@@ -1375,8 +1375,41 @@ class ReadActivityViewModel : ViewModel() {
         reloadMLForAllChapters()
     }
 
-    private suspend fun reloadMLForAllChapters(reTranslate: Boolean = false) {
-        _loadingStatus.postValue(Resource.Loading(context?.getString(R.string.translating)))
+    /**
+     * Vuelve a aplicar las sustituciones de la novela (pestaña "Sustituir" de los ajustes del
+     * lector) a los capítulos ya cargados y regresa al punto de lectura. Sirve igual para
+     * novelas de la app que para EPUBs abiertos desde Descargas: las reglas se guardan con el
+     * título del libro abierto. Llamar una sola vez al cerrar el editor y no tras cada regla,
+     * porque con una traducción activa una regla "antes" obliga a retraducir.
+     */
+    fun reapplyReplacements() = ioSafe {
+        reloadMLForAllChapters(
+            loadingText = context?.getString(R.string.replace_applying),
+            restorePosition = true
+        )
+    }
+
+    /** Título con el que se guardan las sustituciones de este libro (null si aún no se cargó). */
+    fun replacementsNovelName(): String? =
+        if (::book.isInitialized) book.title() else null
+
+    /**
+     * Tras cambiar el texto, el offset de caracteres guardado ya no encaja: se lleva la posición
+     * al inicio del mismo párrafo (innerIndex es estable entre versiones del texto).
+     */
+    private suspend fun snapScrollIndexToParagraph(from: ScrollIndex): ScrollIndex {
+        val live = (chapterMutex.withLock { chapterData[from.index] } as? Resource.Success<LiveChapterData>)?.value
+            ?: return from
+        val span = live.spans.firstOrNull { it.innerIndex == from.innerIndex } ?: return from
+        return ScrollIndex(from.index, from.innerIndex, span.start)
+    }
+
+    private suspend fun reloadMLForAllChapters(
+        reTranslate: Boolean = false,
+        loadingText: String? = context?.getString(R.string.translating),
+        restorePosition: Boolean = false
+    ) {
+        _loadingStatus.postValue(Resource.Loading(loadingText))
         chapterMutex.withLock {
             val cIndex = currentIndex
             val lower = cIndex - chapterPaddingBottom
@@ -1443,7 +1476,10 @@ class ReadActivityViewModel : ViewModel() {
         }
 
         // update what we have read
-        updateReadArea()
+        if (restorePosition) {
+            desiredIndex = desiredIndex?.let { snapScrollIndexToParagraph(it) }
+        }
+        updateReadArea(seekToDesired = restorePosition)
         //refreshChapters()
     }
 

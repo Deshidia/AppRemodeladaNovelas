@@ -361,6 +361,9 @@
     <string name="replace_copy_nothing_new">Esas novelas ya tenían las mismas sustituciones</string>
     <string name="replace_import_done">Importadas: %1$d nuevas, %2$d actualizadas</string>
     <string name="replace_import_nothing_new">Esta novela ya tenía esas sustituciones</string>
+    <string name="replace_reader_novel">Sustituciones de: %s</string>
+    <string name="replace_reader_note">Al cerrar los ajustes, los cambios se aplican a los capítulos abiertos. Se guardan para este libro, así que también valen cuando vuelvas a abrirlo.</string>
+    <string name="replace_applying">Aplicando sustituciones</string>
     <string name="translation_channel_name">Traducción de capítulos</string>
     <string name="translation_channel_description">Se muestra mientras el lector traduce un capítulo en segundo plano</string>
     <string name="translation_in_background">Traduciendo en segundo plano</string>

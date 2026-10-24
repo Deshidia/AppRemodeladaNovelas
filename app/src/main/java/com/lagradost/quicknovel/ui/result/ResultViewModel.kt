@@ -50,6 +50,7 @@ import com.lagradost.quicknovel.ui.download.REVERSE_LAST_ACCES_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_LAST_UPDATED_SORT
 import com.lagradost.quicknovel.ui.download.SortingMethod
 import com.lagradost.quicknovel.util.Apis
+import com.lagradost.quicknovel.untranslatedName
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.DownloadTranslation
 import com.lagradost.quicknovel.util.ResultCached
@@ -582,7 +583,8 @@ class ResultViewModel : ViewModel() {
                     load.rating,
                     (load as? StreamResponse)?.data?.size ?: 1,
                     System.currentTimeMillis(),
-                    synopsis = load.synopsis
+                    synopsis = load.synopsis,
+                    originalName = load.originalName
                 )
             )
         }
@@ -643,7 +645,8 @@ class ResultViewModel : ViewModel() {
                 load.rating,
                 totalChapters,
                 System.currentTimeMillis(),
-                synopsis = load.synopsis
+                synopsis = load.synopsis,
+                originalName = load.originalName
             )
         )
     }
@@ -662,6 +665,16 @@ class ResultViewModel : ViewModel() {
     fun currentMigrationSource(): MigrationSource? {
         if (!hasLoaded) return null
         return MigrationSource(loadId, load.name, apiName)
+    }
+
+    /**
+     * Título original (sin traducir) de la novela cargada, para buscarla en otros proveedores.
+     * Funciona también con las vistas previas que salen de la biblioteca, que no cargan la web.
+     * Null si aún no hay novela cargada.
+     */
+    fun currentOriginalTitle(): String? {
+        if (!hasLoaded) return null
+        return load.untranslatedName
     }
 
     /**
@@ -863,6 +876,7 @@ class ResultViewModel : ViewModel() {
                 tags = card.tags,
                 apiName = card.apiName
             )
+            data.originalName = card.originalName
 
             load = data
             loadResponse.postValue(Resource.Success(data))
@@ -907,6 +921,7 @@ class ResultViewModel : ViewModel() {
                 tags = card.tags,
                 apiName = card.apiName
             )
+            data.originalName = NovelMigration.savedOriginalName(card.id)
             load = data
             loadResponse.postValue(Resource.Success(data))
             setState(card.id)

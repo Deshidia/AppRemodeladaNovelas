@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Bundle
+import android.view.HapticFeedbackConstants
 import android.view.Menu
 import android.view.MenuItem
 import android.view.WindowManager
@@ -60,6 +61,7 @@ import com.lagradost.quicknovel.ui.LibraryCategoriesDialog
 import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.download.DownloadFragment
 import com.lagradost.quicknovel.ui.result.MigrationSource
+import com.lagradost.quicknovel.ui.result.NovelMigration
 import com.lagradost.quicknovel.ui.result.ResultFragment
 import com.lagradost.quicknovel.ui.result.ResultViewModel
 import com.lagradost.quicknovel.ui.search.SearchFragment
@@ -718,6 +720,22 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         resultviewPreviewTitle.text = d.name
+                        // Mantener pulsado el título: busca esta novela en los demás proveedores
+                        // con su título original (y permite migrar). Se usa lo guardado en la
+                        // tarjeta, así que funciona aunque la web no cargue y no se pueda abrir
+                        // la ficha.
+                        resultviewPreviewTitle.setOnLongClickListener { titleView ->
+                            val originalTitle = viewModel.currentOriginalTitle()
+                            val source = viewModel.currentMigrationSource()
+                            if (originalTitle == null || source == null) {
+                                return@setOnLongClickListener false
+                            }
+                            titleView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            if (NovelMigration.searchByOriginalTitle(this@MainActivity, originalTitle, source)) {
+                                hidePreviewPopupDialog()
+                            }
+                            true
+                        }
 
                         resultviewPreviewMoreInfo.setOnClickListener {
                             loadResult(d.url, viewModel.apiName, migrationSource = viewModel.migrationSource)
