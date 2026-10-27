@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Textos del proveedor NovelUpdates y de los filtros de búsqueda. Archivo aparte a propósito:
+     así no hay que tocar strings.xml. -->
+<resources>
+    <string name="search_filters_title">Search options</string>
+    <string name="search_filters_for">%1$s filters</string>
+    <string name="search_filters_apply">Search with these filters</string>
+    <string name="search_filters_reset">Reset filters</string>
+    <string name="search_filters_any">Any</string>
+    <string name="search_filters_min">At least (min.)</string>
+    <string name="search_filters_max">At most (max.)</string>
+    <string name="search_filters_value_hint">Value</string>
+    <string name="search_filters_n_selected">%1$d selected</string>
+    <string name="search_filters_loading">Loading options…</string>
+    <string name="search_filters_load_failed">Could not load the options of this filter</string>
+    <string name="search_filters_bad_date">Invalid date, use mm/dd/yyyy</string>
+    <!-- Heredado: ya no se usa, pero evita que compile mal un InteractiveWebView.kt antiguo si reaparece -->
+    <string name="cloudflare_verify_title">Complete the Cloudflare check to continue</string>
+    <string name="nu_login_title">Log in to NovelUpdates to see the chapters</string>
+</resources>

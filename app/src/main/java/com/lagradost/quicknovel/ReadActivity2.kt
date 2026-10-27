@@ -49,6 +49,8 @@ import com.lagradost.quicknovel.TTSNotifications.TTS_NOTIFICATION_ID
 import com.lagradost.quicknovel.databinding.ChapterSelectDialogSearchBinding
 import com.lagradost.quicknovel.databinding.ColorRoundCheckmarkBinding
 import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
+import com.lagradost.quicknovel.ui.tts.ActorsPanel
+import com.lagradost.quicknovel.util.tts.GeminiSpeechClient
 import com.lagradost.quicknovel.databinding.ReadMainBinding
 import com.lagradost.quicknovel.databinding.SingleOverscrollChapterBinding
 import com.lagradost.quicknovel.mvvm.Resource
@@ -1707,6 +1709,54 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         }
                     }
                 }
+            }
+
+            // Motor de voz: TTS del sistema o Gemini 3.8 (un actor por personaje). Se aplica la
+            // próxima vez que se empiece a leer en voz alta.
+            fun engineLabel(engine: String) = getString(
+                when (engine) {
+                    GeminiSpeechClient.MODEL_FLASH -> R.string.tts_engine_gemini_flash
+                    GeminiSpeechClient.MODEL_FLASH_LITE -> R.string.tts_engine_gemini_lite
+                    else -> R.string.tts_engine_system
+                }
+            )
+            bindingSettings.readTtsEngine.text = engineLabel(viewModel.ttsEngine)
+            bindingSettings.readTtsEngine.setOnClickListener { view ->
+                view.popupMenu(
+                    items = listOf(
+                        1 to R.string.tts_engine_system,
+                        2 to R.string.tts_engine_gemini_flash,
+                        3 to R.string.tts_engine_gemini_lite,
+                    ),
+                    selectedItemId = when (viewModel.ttsEngine) {
+                        GeminiSpeechClient.MODEL_FLASH -> 2
+                        GeminiSpeechClient.MODEL_FLASH_LITE -> 3
+                        else -> 1
+                    }
+                ) {
+                    viewModel.ttsEngine = when (itemId) {
+                        2 -> GeminiSpeechClient.MODEL_FLASH
+                        3 -> GeminiSpeechClient.MODEL_FLASH_LITE
+                        else -> TTS_ENGINE_SYSTEM
+                    }
+                    bindingSettings.readTtsEngine.text = engineLabel(viewModel.ttsEngine)
+                    if (viewModel.ttsEngine != TTS_ENGINE_SYSTEM && viewModel.mlAiApiKey.isBlank()) {
+                        // Gemini necesita la clave (pestaña de traducción con IA)
+                        showToast(R.string.tts_gemini_no_key)
+                    } else if (viewModel.ttsEngine != TTS_ENGINE_SYSTEM) {
+                        showToast(R.string.tts_engine_ready)
+                    }
+                }
+            }
+            bindingSettings.readTtsActors.setOnClickListener {
+                val novel = viewModel.replacementsNovelName() ?: return@setOnClickListener
+                val actorsDialog = BottomSheetDialog(this)
+                val scroll = android.widget.ScrollView(this).apply {
+                    setPadding(20.toPx, 20.toPx, 20.toPx, 20.toPx)
+                    addView(ActorsPanel(this@ReadActivity2, novel).build())
+                }
+                actorsDialog.setContentView(scroll)
+                actorsDialog.show()
             }
 
             bindingSettings.readLanguage.setOnLongClickListener {

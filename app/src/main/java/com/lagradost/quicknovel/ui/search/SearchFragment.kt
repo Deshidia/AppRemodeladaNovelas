@@ -13,7 +13,9 @@ import androidx.fragment.app.viewModels
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.lagradost.quicknovel.APIRepository.Companion.providersActive
 import com.lagradost.quicknovel.CommonActivity.activity
+import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.HomePageList
 import com.lagradost.quicknovel.databinding.FragmentSearchBinding
 import com.lagradost.quicknovel.databinding.HomeEpisodesExpandedBinding
@@ -26,7 +28,9 @@ import com.lagradost.quicknovel.ui.home.HomeViewModel
 import com.lagradost.quicknovel.ui.result.MigrationSource
 import com.lagradost.quicknovel.ui.setRecycledViewPool
 import com.lagradost.quicknovel.ui.settings.SettingsFragment
+import com.lagradost.quicknovel.util.Apis.Companion.apis
 import com.lagradost.quicknovel.util.Event
+import com.lagradost.quicknovel.util.SingleSelectionHelper.showDialog
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
 
 class SearchFragment : BaseFragment<FragmentSearchBinding>(
@@ -194,7 +198,37 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         searchMagIcon.scaleY = 0.65f
 
         binding.searchFilter.setOnClickListener {
-            SettingsFragment.showSearchProviders(it.context)
+            val ctx = it.context
+            // Proveedores activos que ofrecen filtros de búsqueda (p. ej. NovelUpdates)
+            val filterApis = apis.filter { api ->
+                api.searchFilters.isNotEmpty() &&
+                        (providersActive.isEmpty() || providersActive.contains(api.name))
+            }
+            if (filterApis.isEmpty()) {
+                SettingsFragment.showSearchProviders(ctx)
+                return@setOnClickListener
+            }
+
+            val items = listOf(ctx.getString(R.string.search_providers)) +
+                    filterApis.map { api -> ctx.getString(R.string.search_filters_for, api.name) }
+            ctx.showDialog(
+                items = items,
+                selectedIndex = -1,
+                name = ctx.getString(R.string.search_filters_title),
+                showApply = false,
+                dismissCallback = {},
+                callback = { index ->
+                    if (index == 0) {
+                        SettingsFragment.showSearchProviders(ctx)
+                    } else {
+                        val api = filterApis[index - 1]
+                        SearchFiltersDialog.show(ctx, api, viewModel.getFilters(api.name)) { values ->
+                            viewModel.setFilters(api.name, values)
+                            viewModel.search(binding.mainSearch.query?.toString().orEmpty())
+                        }
+                    }
+                }
+            )
         }
 
         binding.mainSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {

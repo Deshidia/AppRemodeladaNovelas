@@ -568,6 +568,12 @@ class MainActivity : AppCompatActivity() {
         CommonActivity.init(this)
 
         super.onCreate(savedInstanceState)
+        // el audio del TTS de Gemini que no se guardó en la carpeta TTS caduca a los 3 días
+        ioSafe {
+            com.lagradost.quicknovel.util.tts.TtsAudioCache(
+                java.io.File(cacheDir, com.lagradost.quicknovel.util.tts.TtsAudioCache.DIR)
+            ).sweep()
+        }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding!!.root)
 

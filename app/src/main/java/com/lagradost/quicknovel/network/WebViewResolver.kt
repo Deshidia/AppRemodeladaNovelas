@@ -31,13 +31,16 @@ import kotlin.time.Duration.Companion.seconds
  * @param userAgent if null then will use the default user agent
  * @param useOkhttp will try to use the okhttp client as much as possible, but this might cause some requests to fail. Disable for cloudflare.
  * @param scriptToFinish Optional JavaScript that, when injected, must call NativeAndroid.onElementFound(String).
+ * @param timeoutSeconds maximum time to wait for the WebView (60 by default).
  * */
 class WebViewResolver(
     val interceptUrl: Regex? = null,
     val additionalUrls: List<Regex> = emptyList(),
     val userAgent: String? = null,
     val useOkhttp: Boolean = false,
-    val scriptToFinish: String? = null
+    val scriptToFinish: String? = null,
+    /** Tiempo máximo de espera del WebView; si vence devuelve lo recogido hasta entonces. */
+    val timeoutSeconds: Long = 60
 ) :
     Interceptor {
     private val blockedTrackerHosts = setOf(
@@ -326,8 +329,8 @@ class WebViewResolver(
             }
         }
 
-        // Wait for the WebView to finish (max 60 seconds)
-        val result = withTimeoutOrNull(60.seconds) {
+        // Wait for the WebView to finish (max [timeoutSeconds], 60 by default)
+        val result = withTimeoutOrNull(timeoutSeconds.seconds) {
             deferredResponse.await()
         }
 

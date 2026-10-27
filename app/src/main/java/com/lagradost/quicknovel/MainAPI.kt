@@ -69,6 +69,29 @@ abstract class MainAPI {
         throw NotImplementedError()
     }
 
+    /**
+     * Filtros de búsqueda que ofrece el proveedor (género, estado, orden...). Si está vacío el
+     * proveedor solo se busca por texto. La app los muestra en un diálogo y los pasa a
+     * [search] (con filtros) como `clave -> valores`.
+     */
+    open val searchFilters: List<SearchFilter> = emptyList()
+
+    /**
+     * Opciones de un filtro con [SearchFilter.lazyOptions] (listas largas que se descargan de la web,
+     * p. ej. las etiquetas). Por defecto devuelve las opciones fijas del filtro.
+     */
+    open suspend fun loadSearchFilterOptions(filter: SearchFilter): List<SearchFilterOption> =
+        filter.options
+
+    /**
+     * Búsqueda con filtros. [query] puede estar vacío (solo filtros). Los proveedores sin filtros
+     * ignoran [filters] y se comportan como [search].
+     */
+    open suspend fun search(
+        query: String,
+        filters: Map<String, List<String>>
+    ): List<SearchResponse>? = search(query)
+
     open suspend fun load(url: String): LoadResponse? {
         throw NotImplementedError()
     }
@@ -98,6 +121,40 @@ abstract class MainAPI {
         }
     }*/
 }
+
+enum class SearchFilterType {
+    /** Una opción de una lista (o ninguna). */
+    SINGLE,
+
+    /** Varias opciones de una lista. */
+    MULTI,
+
+    /** Un número (admite decimales), opcionalmente con operador mín./máx. */
+    NUMBER,
+
+    /** Una fecha en texto (mm/dd/aaaa), opcionalmente con operador mín./máx. */
+    DATE,
+}
+
+data class SearchFilterOption(val label: String, val value: String)
+
+/**
+ * @param key clave con la que se entrega el valor a [MainAPI.search]
+ * @param operatorKey (solo NUMBER/DATE) clave en la que se entrega el operador "min" o "max"
+ * @param defaultOperator operador que se usa si el usuario no elige ninguno
+ * @param lazyOptions las opciones se piden con [MainAPI.loadSearchFilterOptions]
+ * @param emptyLabel texto de "sin elegir" si no debe ser el genérico (p. ej. "And (por defecto)")
+ */
+data class SearchFilter(
+    val key: String,
+    val label: String,
+    val type: SearchFilterType,
+    val options: List<SearchFilterOption> = emptyList(),
+    val operatorKey: String? = null,
+    val defaultOperator: String = "min",
+    val lazyOptions: Boolean = false,
+    val emptyLabel: String? = null,
+)
 
 class ErrorLoadingException(message: String? = null) : Exception(message)
 

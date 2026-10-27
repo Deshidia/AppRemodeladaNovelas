@@ -236,9 +236,13 @@ class APIRepository(val api: MainAPI) {
         }
     }
 
-    suspend fun search(query: String): Resource<List<SearchResponse>> {
+    suspend fun search(
+        query: String,
+        filters: Map<String, List<String>> = emptyMap()
+    ): Resource<List<SearchResponse>> {
         return safeApiCall {
-            api.search(query) ?: throw ErrorLoadingException("No data")
+            val result = if (filters.isEmpty()) api.search(query) else api.search(query, filters)
+            result ?: throw ErrorLoadingException("No data")
         }
     }
 

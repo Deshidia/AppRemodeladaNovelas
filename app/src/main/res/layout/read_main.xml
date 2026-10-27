@@ -32,6 +32,22 @@
             android:gravity="center"
             android:textColor="@color/colorPrimary"
             tools:text="@string/delete" />
+
+        <!-- Solo visible mientras se está traduciendo de verdad: detiene la traducción -->
+        <ImageButton
+            android:id="@+id/read_loading_stop"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="24dp"
+            android:layout_marginEnd="16dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/stop_translation"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/close_24px"
+            android:visibility="gone"
+            tools:visibility="visible" />
     </FrameLayout>
 
     <FrameLayout

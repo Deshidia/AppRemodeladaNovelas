@@ -45,6 +45,7 @@ import com.lagradost.quicknovel.providers.NovelFullProvider
 import com.lagradost.quicknovel.providers.NovelLightProvider
 import com.lagradost.quicknovel.providers.NovelManiaProvider
 import com.lagradost.quicknovel.providers.NovelPhoenixProvider
+import com.lagradost.quicknovel.providers.NovelUpdatesProvider
 import com.lagradost.quicknovel.providers.NovelasLigerasProvider
 import com.lagradost.quicknovel.providers.PawReadProver
 import com.lagradost.quicknovel.providers.PlanetaEpubProvider
@@ -124,6 +125,7 @@ class Apis {
             //NovelsOnlineProvider(), // not working
             NovLoveProvider(),
             NovelPhoenixProvider(),
+            NovelUpdatesProvider(),
             PawReadProver(),
             //PlanetaEpubProvider(), //not working
             QuanbenProvider(),

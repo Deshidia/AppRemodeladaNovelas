@@ -48,6 +48,7 @@ import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.ui.setRecycledViewPool
+import com.lagradost.quicknovel.ui.tts.ActorsPanel
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.DownloadTranslation
 import com.lagradost.quicknovel.util.DownloadTranslator
@@ -76,6 +77,9 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
     companion object {
         /** Id de la pestaña "Sustituir" (0 = Novela, 1 = Reseñas, 2 = Relacionado, 3 = Capítulos). */
         const val TAB_REPLACE = 4
+
+        /** Id de la pestaña "Actores" (voz de cada personaje para el TTS de Gemini), junto a "Sustituir". */
+        const val TAB_ACTORS = 5
 
         fun newInstance(
             url: String,
@@ -158,6 +162,19 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             replaceAddBtn.setText(R.string.replace_add)
             replaceAddBtn.setIconResource(R.drawable.ic_baseline_add_24)
             replaceCancelBtn.isVisible = false
+        }
+    }
+
+    /** Novela cuyo panel de actores está montado (para no reconstruirlo si la ficha se repinta). */
+    private var actorsNovel: String? = null
+
+    private fun setupActorsTab(binding: FragmentResultBinding, novelName: String) {
+        if (actorsNovel == novelName) return
+        val act = activity ?: return
+        actorsNovel = novelName
+        binding.resultActorsHolder.apply {
+            removeAllViews()
+            addView(ActorsPanel(act, novelName).build())
         }
     }
 
@@ -514,7 +531,11 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     resultTabs.addTab(
                         resultTabs.newTab().setText(R.string.replace_tab).setId(TAB_REPLACE)
                     )
+                    resultTabs.addTab(
+                        resultTabs.newTab().setText(R.string.actors_tab).setId(TAB_ACTORS)
+                    )
                     viewModel.loadReplacements(res.name)
+                    setupActorsTab(binding, res.name)
 
                     val target = viewModel.currentTabIndex.value
                     if (target != null) {
@@ -969,6 +990,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 resultRelatedholder.isVisible = 2 == pos
                 resultChapterholder.isVisible = 3 == pos
                 resultReplaceHolder.isVisible = TAB_REPLACE == pos
+                resultActorsHolder.isVisible = TAB_ACTORS == pos
             }
         }
 

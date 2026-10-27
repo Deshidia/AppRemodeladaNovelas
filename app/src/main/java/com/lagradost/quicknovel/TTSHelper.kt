@@ -22,6 +22,8 @@ import com.lagradost.quicknovel.ui.UiText
 import com.lagradost.quicknovel.ui.txt
 import com.lagradost.quicknovel.util.UIHelper.requestAudioFocus
 import com.lagradost.quicknovel.util.UIHelper.unRequestAudioFocus
+import com.lagradost.quicknovel.util.tts.GeminiTtsPlayer
+import com.lagradost.quicknovel.util.tts.VoiceLine
 import io.noties.markwon.Markwon
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -64,8 +66,14 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
     private var speed: Float = 1.0f
     private var pitch: Float = 1.0f
 
+    /**
+     * Motor de voz de Gemini (null = TTS del sistema). Lo pone el lector al empezar a leer según
+     * el motor elegido; con él puesto, el TTS de Android ni se inicializa.
+     */
+    var gemini: GeminiTtsPlayer? = null
+
     fun isValidTTS(): Boolean {
-        return tts != null
+        return gemini?.isReady() ?: (tts != null)
     }
 
     private fun clearTTS(tts: TextToSpeech) {
@@ -76,6 +84,7 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
     fun setSpeed(speed: Float) {
         this.speed = speed
         tts?.setSpeechRate(speed)
+        gemini?.setSpeed(speed)
     }
 
     fun setPitch(pitch: Float) {
@@ -103,6 +112,7 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
     }
 
     fun interruptTTS() {
+        gemini?.interrupt()
         // we don't actually want to initialize tts here
         tts?.let { tts ->
             clearTTS(tts)
@@ -110,7 +120,7 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
     }
 
     fun ttsInitialized(): Boolean {
-        return tts != null
+        return gemini != null || tts != null
     }
 
     suspend fun speak(
@@ -118,6 +128,7 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
         next: TTSHelper.TTSLine?,
         action: () -> Boolean
     ): Int? {
+        gemini?.let { return it.speak(line, next) }
         val tts = requireTTS(action) ?: return null
 
         val queue = TTSQueue
@@ -141,6 +152,7 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
      * break early and interrupt TTS */
     suspend fun waitForOr(id: Int?, action: () -> Boolean, then: () -> Unit) {
         if (id == null) return
+        gemini?.let { return it.waitForOr(id, action, then) }
         while (id > TTSEndSpeakId) {
             delay(50)
             if (action()) {
@@ -256,6 +268,8 @@ class TTSSession(val context: Context, event: (TTSHelper.TTSActionType) -> Boole
     }
 
     fun release() {
+        gemini?.release()
+        gemini = null
         tts?.apply {
             stop()
             setOnUtteranceProgressListener(null) // Fucking retarded leak
@@ -413,6 +427,8 @@ object TTSHelper {
         val startChar: Int,
         val endChar: Int,
         val index: Int,
+        /** Solo con el motor Gemini: quién habla, cómo y cuánto silencio va antes. */
+        val voice: VoiceLine? = null,
     )
 
     enum class TTSStatus {

@@ -60,11 +60,35 @@ class SearchViewModel : ViewModel() {
 
     var ongoingSearchJob : Job? = null
 
+    // Filtros de búsqueda elegidos por el usuario, por proveedor (nombre -> clave -> valores)
+    private val activeFilters = HashMap<String, Map<String, List<String>>>()
+
+    fun getFilters(apiName: String): Map<String, List<String>> =
+        synchronized(activeFilters) { activeFilters[apiName] ?: emptyMap() }
+
+    fun setFilters(apiName: String, values: Map<String, List<String>>) {
+        synchronized(activeFilters) {
+            if (values.isEmpty()) activeFilters.remove(apiName)
+            else activeFilters[apiName] = values.toMap()
+        }
+    }
+
+    private fun hasFilters(repo: APIRepository): Boolean =
+        repo.api.searchFilters.isNotEmpty() && getFilters(repo.name).isNotEmpty()
+
     fun search(query: String) {
-        if (query.length <= 1) {
+        val activeRepos = repos.filter { a ->
+            providersActive.isEmpty() || providersActive.contains(a.name)
+        }
+        val queryTooShort = query.length <= 1
+        // Sin texto (o con una sola letra) solo se busca en los proveedores con filtros elegidos
+        val targets = if (queryTooShort) activeRepos.filter { hasFilters(it) } else activeRepos
+        if (targets.isEmpty()) {
             clearSearch()
             return
         }
+        val effectiveQuery = if (queryTooShort) "" else query
+
         ongoingSearchJob?.cancel()
         ongoingSearchJob = ioSafe {
             searchCounter++
@@ -75,11 +99,9 @@ class SearchViewModel : ViewModel() {
 
             _currentSearch.postValue(ArrayList())
 
-            repos.filter { a ->
-                (providersActive.isEmpty() || providersActive.contains(a.name))
-            }.amap { a ->
+            targets.amap { a ->
                 if(!isActive) return@amap
-                val res = a.search(query)
+                val res = a.search(effectiveQuery, getFilters(a.name))
                 if (res is Resource.Success && res.value.isNotEmpty()) {
                     currentList.add(OnGoingSearch(a.name, res))
                     if (localSearchCounter == searchCounter) {

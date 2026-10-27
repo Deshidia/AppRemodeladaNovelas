@@ -34,6 +34,7 @@ Adfree FOSS Android app for downloading novels. It also functions as an Epub rea
 - https://novelfire.net
 - https://novelfull.com
 - https://novelsonline.org
+- https://www.novelupdates.com
 - https://novlove.com
 - https://pawread.com
 - https://readfrom.net
