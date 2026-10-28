@@ -55,10 +55,16 @@ agrupar frases vecinas tampoco basta (30-60 por capítulo). Por eso:
 * **Plan B de una sola voz:** varios turnos de una voz se piden con `speech_config` en array; si la
   API responde 400 se reintenta con la forma de dos hablantes (el segundo no se usa). Las voces de
   la Biblioteca/Voice design solo admiten la primera forma.
-* **Cuota:** limitador por minuto (3 por defecto, ventana deslizante de 60 s), contador local de
-  peticiones de hoy, aviso ANTES de empezar un capítulo si no caben, y un 429 de cuota diaria
-  se reconoce y no se reintenta. Los límites se cambian en *Actores → Cuota…* (0 = sin límite).
-  El contador es local: el día de Google termina a medianoche hora del Pacífico.
+* **Cuota:** TODAS las peticiones de esta función (audio e identificación de hablantes) pasan por un único
+  punto, `TtsQuota.send`: limitador compartido de **3 por minuto** (ventana deslizante de 60 s + margen,
+  ajustable en *Actores → Cuota…*), así que en total nunca se supera aunque el 429 lo dé otro modelo.
+  Un 429 de frecuencia llena la ventana (la siguiente petición espera un minuto entero) y avisa con un
+  toast; un 429 de cuota diaria es fatal y no se reintenta; los 5xx y fallos de red se reintentan con
+  espera corta. El mensaje de error dice qué cuota y qué modelo (p. ej.
+  `GenerateRequestsPerMinutePerProjectPerModel-FreeTier (gemini-3.8-flash-tts)`). Si no se puede
+  identificar a los hablantes, la lectura se detiene en vez de gastar audio con voces genéricas.
+  Contador local de peticiones de hoy, aviso ANTES de empezar un capítulo si no caben. El contador es
+  local: el día de Google termina a medianoche hora del Pacífico.
 * La identificación de hablantes usa ventanas de 150 trozos (1-2 peticiones de texto por capítulo,
   con su propia cuota) y se cachea.
 

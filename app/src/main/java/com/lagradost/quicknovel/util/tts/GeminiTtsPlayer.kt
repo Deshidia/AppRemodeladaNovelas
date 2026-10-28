@@ -365,7 +365,7 @@ class GeminiTtsPlayer(
     }
 
     /** ¿Quedan [n] peticiones de cuota hoy (o no hay límite configurado)? */
-    private fun affordable(n: Int): Boolean = TtsQuota.remainingToday(model)?.let { it >= n } ?: true
+    private fun affordable(n: Int): Boolean = TtsQuota.remainingToday()?.let { it >= n } ?: true
 
     /** Sin cuota para ni una petición más: se avisa y el lector se detiene (no se insiste a ciegas). */
     private fun quotaExhausted(): Boolean {
@@ -409,7 +409,7 @@ class GeminiTtsPlayer(
             var cap = RolePacker.CAP_SECONDS
             var failures = 0
             while (pending.isNotEmpty() && batching && !fatal && failures < MAX_PACK_FAILURES) {
-                if (TtsQuota.remainingToday(model) == 0) {
+                if (TtsQuota.remainingToday() == 0) {
                     showToast(R.string.tts_quota_exhausted)
                     break
                 }

@@ -44,4 +44,6 @@
     <string name="tts_quota_insufficient">This chapter needs about %1$d requests and only %2$d are left today (limit %3$d). Change the limit in Actors if your quota is higher.</string>
     <string name="tts_quota_exhausted">Daily Gemini TTS quota reached. Try again tomorrow or change the limit in Actors.</string>
     <string name="tts_quota_skipped">Not enough quota to generate this chapter audio. Reading stopped.</string>
+    <string name="tts_rate_wait">Waiting %1$d s so as not to exceed the requests-per-minute limit…</string>
+    <string name="tts_speakers_failed_stop">Could not identify the speakers (rate limit?). Stopped so no audio quota is wasted: wait a minute and press the speaker button again.</string>
 </resources>

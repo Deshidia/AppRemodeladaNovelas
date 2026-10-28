@@ -44,4 +44,6 @@
     <string name="tts_quota_insufficient">Este capítulo necesita unas %1$d peticiones y hoy solo te quedan %2$d (límite %3$d). Cambia el límite en Actores si tu cuota es mayor.</string>
     <string name="tts_quota_exhausted">Cuota diaria del TTS de Gemini agotada. Prueba mañana o cambia el límite en Actores.</string>
     <string name="tts_quota_skipped">No hay cuota suficiente para generar el audio de este capítulo. Lectura detenida.</string>
+    <string name="tts_rate_wait">Esperando %1$d s para no pasar el límite de peticiones por minuto…</string>
+    <string name="tts_speakers_failed_stop">No se pudo identificar a los hablantes (¿límite de frecuencia?). Se detiene para no gastar cuota de audio: espera un minuto y vuelve a pulsar el altavoz.</string>
 </resources>

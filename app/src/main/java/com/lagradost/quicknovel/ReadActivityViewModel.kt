@@ -74,14 +74,6 @@ import com.lagradost.quicknovel.util.Coroutines.runOnMainThread
 import com.lagradost.quicknovel.util.GoogleTranslateOnline
 import com.lagradost.quicknovel.util.DeepLTranslate
 import com.lagradost.quicknovel.util.GeminiTranslate
-import com.lagradost.quicknovel.ui.settings.SettingsFragment
-import com.lagradost.quicknovel.ui.settings.SettingsFragment.Companion.getBasePath
-import com.lagradost.quicknovel.util.tts.GeminiSpeakerAnnotator
-import com.lagradost.quicknovel.util.tts.GeminiTtsDirector
-import com.lagradost.quicknovel.util.tts.GeminiTtsPlayer
-import com.lagradost.quicknovel.util.tts.TtsActors
-import com.lagradost.quicknovel.util.tts.TtsAudioCache
-import com.lagradost.quicknovel.util.tts.TtsQuota
 import com.lagradost.quicknovel.util.ReplaceTiming
 import com.lagradost.quicknovel.util.TextReplacement
 import com.lagradost.quicknovel.util.TextReplacements
@@ -148,8 +140,6 @@ class PreferenceDelegate<T : Any>(
         }
     }
 }
-
-const val TTS_ENGINE_SYSTEM = "system"
 
 enum class GeminiThinkingLevel {
     AUTO, OFF, LOW, MEDIUM, HIGH;
@@ -1980,75 +1970,6 @@ class ReadActivityViewModel : ViewModel() {
         TTSNotificationService.start(this@ReadActivityViewModel, context ?: return@ioSafe)
     }
 
-    // ---------------------------------- Motor Gemini (actores) ----------------------------------
-
-    /** Líneas por hablante de cada capítulo ya preparado (índice de capítulo -> resultado). */
-    private val geminiLinesCache = HashMap<Int, GeminiTtsDirector.Prepared>()
-
-    /** Crea el motor Gemini si es el elegido y hay clave; null en otro caso. */
-    private fun createGeminiPlayer(): GeminiTtsPlayer? {
-        val ctx = context ?: return null
-        val model = ttsEngine
-        if (model == TTS_ENGINE_SYSTEM || mlAiApiKey.isBlank()) return null
-        // aprovecha para borrar el audio en caché de más de 3 días
-        ioSafe { TtsAudioCache(File(ctx.cacheDir, TtsAudioCache.DIR)).sweep() }
-        return GeminiTtsPlayer(File(ctx.cacheDir, TtsAudioCache.DIR), book.title(), mlAiApiKey, model)
-    }
-
-    /**
-     * Líneas que lee el TTS para este capítulo. Con el TTS del sistema, frases sueltas. Con Gemini,
-     * una línea por turno de hablante (identificados antes de generar el audio).
-     */
-    private suspend fun ttsLinesFor(index: Int, data: LiveChapterData): List<TTSHelper.TTSLine> {
-        if (ttsSession?.gemini == null) return data.ttsLines
-        geminiLinesCache[index]?.let { return it.lines }
-
-        val ctx = context ?: return data.ttsLines
-        showToast(R.string.tts_identifying_speakers)
-        val prepared = try {
-            GeminiTtsDirector.prepare(
-                File(ctx.cacheDir, TtsAudioCache.DIR),
-                book.title(),
-                index,
-                data.rendered.substring(0, data.rendered.length),
-                mlAiApiKey,
-                ttsAnnotatorModel.ifBlank { GeminiSpeakerAnnotator.DEFAULT_MODEL },
-            )
-        } catch (e: com.lagradost.quicknovel.util.tts.GeminiApiException) {
-            showToast(e.message)
-            currentTTSStatus = TTSHelper.TTSStatus.IsStopped
-            return emptyList()
-        }
-        if (!prepared.identified) showToast(R.string.tts_speakers_failed)
-        // solo se recuerdan los capítulos identificados: si falló, se reintenta la próxima vez
-        if (prepared.identified) geminiLinesCache[index] = prepared
-        return prepared.lines
-    }
-
-    /** Guarda el capítulo [index] como WAV en <ruta de descarga>/TTS/<novela>/ si está activado. */
-    private fun exportChapterAudio(index: Int) {
-        val player = ttsSession?.gemini ?: return
-        val novel = book.title()
-        if (!TtsActors.saveAudio(novel)) return
-        val prepared = geminiLinesCache[index] ?: return
-        val ctx = context ?: return
-        val title = chaptersTitlesInternal.getOrNull(index)?.asStringNull(ctx).orEmpty()
-        val fileBase = "%03d - %s".format(index + 1, title).trim().trimEnd('-', ' ')
-
-        ioSafe {
-            val base = ctx.getBasePath().first ?: SettingsFragment.getDefaultDir(ctx)
-            if (base == null) {
-                showToast(R.string.tts_save_failed)
-                return@ioSafe
-            }
-            val ok = player.exportChapter(base, fileBase, prepared.lines, prepared.script)
-            showToast(
-                if (ok) ctx.getString(R.string.tts_saved_format, "TTS/$novel/$fileBase.wav")
-                else ctx.getString(R.string.tts_save_failed)
-            )
-        }
-    }
-
     suspend fun startTTSThread() = coroutineScope {
         val ttsSession = ttsSession ?: return@coroutineScope
         try {
@@ -2063,17 +1984,6 @@ class ReadActivityViewModel : ViewModel() {
                 ttsSession.register()
                 ttsSession.setSpeed(ttsSpeed)
                 ttsSession.setPitch(ttsPitch)
-
-                // Motor de voz: Android (por defecto) o Gemini con un actor por personaje
-                val geminiPlayer = createGeminiPlayer()
-                if (ttsEngine != TTS_ENGINE_SYSTEM && geminiPlayer == null) {
-                    // se eligió Gemini pero falta la clave: no se cambia de voz en silencio
-                    showToast(R.string.tts_gemini_no_key)
-                    currentTTSStatus = TTSHelper.TTSStatus.IsStopped
-                    return@withLock
-                }
-                ttsSession.gemini = geminiPlayer
-                geminiLinesCache.clear()
 
                 var ttsInnerIndex = 0 // this inner index is different from what is set
                 var index = dIndex.index
@@ -2091,9 +2001,11 @@ class ReadActivityViewModel : ViewModel() {
                     if (target != null) index = target.chapterIndex
                     val startChar = target?.start ?: dIndex.char
 
-                    val firstLive = chapterMutex.withLock { chapterData[index].letInner { it } }
-                    // con Gemini la identificación de hablantes puede tardar unos segundos
-                    val lines = firstLive?.let { ttsLinesFor(index, it) } ?: run {
+                    val lines = chapterMutex.withLock {
+                        chapterData[index].letInner {
+                            it.ttsLines
+                        }
+                    } ?: run {
                         // in case of error just go to the next chapter
                         index++
                         return@let
@@ -2136,7 +2048,7 @@ class ReadActivityViewModel : ViewModel() {
 
                             is Resource.Success -> {
                                 currentRendered = currentData.value.rendered
-                                ttsLinesFor(index, currentData.value)
+                                currentData.value.ttsLines
                             }
                         }
 
@@ -2151,25 +2063,6 @@ class ReadActivityViewModel : ViewModel() {
                         updateTTSGlobalState(index)
                     }
                     notify()
-                    val geminiPlayer = ttsSession.gemini
-                    if (geminiPlayer != null) {
-                        geminiPlayer.setChapter(lines)
-                        // con una cuota pequeña (p. ej. 10 peticiones/día) se avisa ANTES de gastar nada
-                        val model = ttsEngine
-                        val needed = geminiPlayer.estimateRequests()
-                        val left = TtsQuota.remainingToday(model)
-                        val ctx = context
-                        if (needed > 0 && left != null && needed > left) {
-                            if (ctx != null) {
-                                showToast(ctx.getString(R.string.tts_quota_insufficient, needed, left, TtsQuota.rpd(model)))
-                            }
-                            currentTTSStatus = TTSHelper.TTSStatus.IsStopped
-                            break
-                        }
-                        if (needed > 0 && left != null && ctx != null) {
-                            showToast(ctx.getString(R.string.tts_chapter_cost, needed, left))
-                        }
-                    }
 
                     // this is because if you go back one line you will be on the previous chapter with
                     // a negative innerIndex, this makes the wrapping good
@@ -2312,9 +2205,6 @@ class ReadActivityViewModel : ViewModel() {
                     }
                     if (currentTTSStatus == TTSHelper.TTSStatus.IsStopped) break
 
-                    // capítulo leído entero: si el usuario lo pidió, se guarda el audio en TTS/<novela>
-                    if (ttsInnerIndex >= lines.size) exportChapterAudio(index)
-
                     // this may case a bug where you cant seek back if the entire chapter is none
                     // but this is better than restarting the chapter
                     if (ttsInnerIndex > 0 || lines.isEmpty()) {
@@ -2343,9 +2233,6 @@ class ReadActivityViewModel : ViewModel() {
             )
             ttsSession.interruptTTS()
             ttsSession.unregister()
-            // el motor Gemini es de una sola sesión de lectura; el TTS del sistema se conserva
-            ttsSession.gemini?.release()
-            ttsSession.gemini = null
             ttsProgressMark = null
             followTTSWithMark = false
             _ttsLine.postValue(null)
@@ -2673,24 +2560,6 @@ class ReadActivityViewModel : ViewModel() {
         "",
         String::class,
         mlDeepLApiKeyLive
-    )
-
-    /** "system" = TTS de Android; o el modelo de Gemini TTS ("gemini-3.8-flash-tts" / "gemini-3.8-flash-lite-tts"). */
-    val ttsEngineLive: MutableLiveData<String> = MutableLiveData(TTS_ENGINE_SYSTEM)
-    var ttsEngine by PreferenceDelegateLiveView(
-        TTS_ENGINE,
-        TTS_ENGINE_SYSTEM,
-        String::class,
-        ttsEngineLive
-    )
-
-    /** Modelo de texto que identifica a los hablantes antes de generar el audio. */
-    val ttsAnnotatorModelLive: MutableLiveData<String> = MutableLiveData(GeminiSpeakerAnnotator.DEFAULT_MODEL)
-    var ttsAnnotatorModel by PreferenceDelegateLiveView(
-        TTS_ANNOTATOR_MODEL,
-        GeminiSpeakerAnnotator.DEFAULT_MODEL,
-        String::class,
-        ttsAnnotatorModelLive
     )
 
     val mlAiApiKeyLive: MutableLiveData<String> = MutableLiveData("")

@@ -93,25 +93,27 @@ class ActorsPanel(private val activity: Activity, private val novel: String) {
             setTextColor(colorOf(R.attr.grayTextColor))
             textSize = 12f
         })
-        val engine = getKey<String>(TTS_ENGINE).orEmpty()
-        val currentModel = if (engine.startsWith("gemini")) engine else GeminiSpeechClient.MODEL_FLASH_LITE
         root.addView(TextView(activity).apply {
-            val left = TtsQuota.remainingToday(currentModel)
-            text = activity.getString(R.string.actors_usage_today, TtsUsage.today(currentModel)) +
-                    (if (left != null) " / ${TtsQuota.rpd(currentModel)}" else "")
+            val left = TtsQuota.remainingToday()
+            text = activity.getString(R.string.actors_usage_today, TtsUsage.today()) +
+                    (if (left != null) " / ${TtsQuota.rpd()}" else "")
             setTextColor(colorOf(R.attr.textColor))
             textSize = 13f
         }, lp(top = 6))
 
         root.addView(
-            com.google.android.material.button.MaterialButton(activity).apply {
+            com.google.android.material.button.MaterialButton(
+                activity, null, com.google.android.material.R.attr.materialButtonStyle
+            ).apply {
                 setText(R.string.actors_quota)
                 setOnClickListener { askQuota() }
             }, lp(top = 8)
         )
 
         root.addView(
-            com.google.android.material.button.MaterialButton(activity).apply {
+            com.google.android.material.button.MaterialButton(
+                activity, null, com.google.android.material.R.attr.materialButtonStyle
+            ).apply {
                 setText(R.string.actors_add)
                 setOnClickListener { askNewActor() }
             }, lp(top = 12)
@@ -176,16 +178,14 @@ class ActorsPanel(private val activity: Activity, private val novel: String) {
 
     /** Cuota del TTS (peticiones por minuto y por día), tal como la muestra AI Studio. */
     private fun askQuota() {
-        val engine = getKey<String>(TTS_ENGINE).orEmpty()
-        val currentModel = if (engine.startsWith("gemini")) engine else GeminiSpeechClient.MODEL_FLASH_LITE
         fun field(hintRes: Int, value: Int) = EditText(activity).apply {
             setHint(hintRes)
             setText(value.toString())
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
             setSingleLine()
         }
-        val rpm = field(R.string.actors_quota_rpm, TtsQuota.rpm(currentModel))
-        val rpd = field(R.string.actors_quota_rpd, TtsQuota.rpd(currentModel))
+        val rpm = field(R.string.actors_quota_rpm, TtsQuota.rpm())
+        val rpd = field(R.string.actors_quota_rpd, TtsQuota.rpd())
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(24.toPx, 8.toPx, 24.toPx, 0)
@@ -203,8 +203,8 @@ class ActorsPanel(private val activity: Activity, private val novel: String) {
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 TtsQuota.setLimits(
-                    rpm.text.toString().toIntOrNull() ?: TtsQuota.defaultRpm(currentModel),
-                    rpd.text.toString().toIntOrNull() ?: TtsQuota.defaultRpd(currentModel)
+                    rpm.text.toString().toIntOrNull() ?: TtsQuota.DEFAULT_RPM,
+                    rpd.text.toString().toIntOrNull() ?: TtsQuota.DEFAULT_RPD
                 )
             }
             .show()

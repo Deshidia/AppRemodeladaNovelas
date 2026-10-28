@@ -16,19 +16,15 @@ object TtsUsage {
     private fun day(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
     @Synchronized
-    fun record(n: Int = 1, model: String = "") {
+    fun record(n: Int = 1) {
         val today = day()
-        val key = if (model.isBlank()) TTS_USAGE_TODAY else "${TTS_USAGE_TODAY}_${model.replace('-', '_')}"
-        setKey(key, "$today|${count(today, key) + n}")
+        setKey(TTS_USAGE_TODAY, "$today|${count(today) + n}")
     }
 
-    fun today(model: String = ""): Int {
-        val key = if (model.isBlank()) TTS_USAGE_TODAY else "${TTS_USAGE_TODAY}_${model.replace('-', '_')}"
-        return count(day(), key)
-    }
+    fun today(): Int = count(day())
 
-    private fun count(today: String, key: String): Int {
-        val stored = getKey<String>(key) ?: return 0
+    private fun count(today: String): Int {
+        val stored = getKey<String>(TTS_USAGE_TODAY) ?: return 0
         val parts = stored.split('|')
         return if (parts.size == 2 && parts[0] == today) parts[1].toIntOrNull() ?: 0 else 0
     }

@@ -2,7 +2,6 @@ package com.lagradost.quicknovel.util.tts
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import kotlinx.coroutines.delay
 import java.io.IOException
 
 /**
@@ -20,7 +19,6 @@ object GeminiSpeakerAnnotator {
     private const val WINDOW = 150 // un capítulo normal cabe en 1-2 peticiones
     private const val CONTEXT = 6
     private const val MAX_CHARS_IN_PROMPT = 700
-    private const val MAX_ATTEMPTS = 3
 
     private val mapper = ObjectMapper()
 
@@ -191,41 +189,34 @@ Answer: [{"i":0,"s":"$NARRATOR_NAME","e":"","b":"none","a":"none"},{"i":1,"s":"S
             )
         )
 
-        for (attempt in 0 until MAX_ATTEMPTS) {
-            try {
-                TtsQuota.limiter.acquire(TtsQuota.rpm(model))
-                TtsUsage.record(model = model)
-                val reply = GeminiHttp.postJson(
-                    "${GeminiHttp.BASE}/models/$model:generateContent", apiKey, body
-                )
-                if (reply.ok) {
+        // Pasa por TtsQuota.send: mismo límite de peticiones/minuto que el audio, y un 429 espera un minuto
+        // entero (antes reintentaba a los 2 y 4 s y provocaba justo el error que quería evitar). Un 429 que
+        // no se arregla, o de cuota diaria, sale como GeminiApiException y el lector se detiene con el motivo.
+        repeat(2) { // el segundo intento solo para un JSON de respuesta ilegible (cuesta otra petición)
+            val reply = try {
+                TtsQuota.send(onAttempt = {}) { // otra cuota distinta a la del TTS: no cuenta en su contador
+                    GeminiHttp.postJson("${GeminiHttp.BASE}/models/$model:generateContent", apiKey, body)
+                }
+            } catch (_: IOException) {
+                return null // sin red: esta ventana queda sin identificar
+            }
+            when {
+                reply.ok -> try {
                     val text = mapper.readTree(reply.text)
                         .path("candidates").path(0).path("content").path("parts")
                         .filter { !it.path("thought").asBoolean(false) }
                         .joinToString("") { (it.path("text").asText("") ?: "") }
                     val parsed = parse(text)
                     if (parsed.isNotEmpty()) return parsed
-                } else if (reply.code == 401 || reply.code == 403) {
-                    throw GeminiApiException(reply.code, "Gemini: clave o región no válidas", true)
-                } else if (reply.code == 400 || reply.code == 404) {
-                    return null // modelo inexistente o petición mala: reintentar no cambia nada
-                } else if (reply.code == 429) {
-                    TtsQuota.limiter.onRateLimited(reply.retryAfterSeconds?.times(1000), rpm = TtsQuota.rpm(model))
-                    val rpm = TtsQuota.rpm(model)
-                    val wait = reply.retryAfterSeconds?.times(1000)
-                        ?: if (rpm > 0) 60_000L / rpm + 1_000L
-                        else (2000L shl attempt)
-                    if (attempt < MAX_ATTEMPTS - 1) delay(wait.coerceIn(1000, 60_000))
-                    continue
+                } catch (_: com.fasterxml.jackson.core.JsonProcessingException) {
+                    // JSON mal formado: se reintenta una vez
                 }
-            } catch (e: GeminiApiException) {
-                throw e
-            } catch (_: IOException) {
-                // se reintenta
-            } catch (_: com.fasterxml.jackson.core.JsonProcessingException) {
-                // JSON mal formado: se reintenta
+
+                reply.code == 401 || reply.code == 403 ->
+                    throw GeminiApiException(reply.code, "Gemini: clave o región no válidas", true)
+
+                else -> return null // modelo inexistente, petición mala, 5xx persistente: reintentar no ayuda
             }
-            if (attempt < MAX_ATTEMPTS - 1) delay(2000L shl attempt)
         }
         return null
     }

@@ -3,7 +3,6 @@ package com.lagradost.quicknovel.util.tts
 import android.util.Base64
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import kotlinx.coroutines.delay
 import java.io.IOException
 import java.net.URLEncoder
 
@@ -134,58 +133,27 @@ object GeminiSpeechClient {
         paddedSingle: Boolean = false,
     ): ByteArray = postForAudio(apiKey, buildBatchRequest(model, turns, paddedSingle))
 
+    /**
+     * Una petición de audio. El límite por minuto, los reintentos por 429/5xx/red y el contador de
+     * cuota los lleva [TtsQuota.send]; aquí solo se interpreta la respuesta. El único reintento propio
+     * es por una respuesta 200 sin audio (cuesta otra petición, así que como mucho una).
+     */
     private suspend fun postForAudio(apiKey: String, request: Map<String, Any>): ByteArray {
-        val model = request["model"] as? String ?: ""
         val body = mapper.writeValueAsString(request)
         var lastError: Exception = IOException("Sin respuesta")
-
-        for (attempt in 0 until MAX_ATTEMPTS) {
-            try {
-                TtsQuota.limiter.acquire(TtsQuota.rpm(model)) // no pasarse de peticiones/minuto
-                TtsUsage.record(model = model) // cada intento cuenta contra la cuota
-                val reply = GeminiHttp.postJson("${GeminiHttp.BASE}/interactions", apiKey, body)
-                if (reply.ok) {
-                    val audio = extractAudio(mapper.readTree(reply.text))
-                    if (audio != null && audio.isNotEmpty()) return audio
-                    lastError = IOException("La respuesta no contenía audio")
-                } else {
-                    val message = errorMessage(reply)
-                    when (reply.code) {
-                        401, 403 -> throw GeminiApiException(
-                            reply.code, "Gemini: clave o región no válidas ($message)", fatal = true
-                        )
-
-                        400, 404 -> throw GeminiApiException(
-                            reply.code, "Gemini TTS: $message", fatal = false
-                        )
-
-                        else -> {
-                            if (reply.code == 429) {
-                                if (TtsQuota.isDailyQuotaError(reply.text)) {
-                                    // reintentar no sirve: hasta mañana no hay más peticiones
-                                    throw GeminiApiException(
-                                        429, "Gemini TTS: cuota diaria agotada ($message)", fatal = true
-                                    )
-                                }
-                                TtsQuota.limiter.onRateLimited(reply.retryAfterSeconds?.times(1000), rpm = TtsQuota.rpm(model))
-                            }
-                            // 429 (ritmo), 500, 503...: se espera y se reintenta
-                            lastError = GeminiApiException(reply.code, message, fatal = false)
-                            val rpm = TtsQuota.rpm(model)
-                            val wait = reply.retryAfterSeconds?.times(1000)
-                                ?: if (reply.code == 429 && rpm > 0) 60_000L / rpm + 1_000L // un hueco de la ventana
-                                else (2000L shl attempt) // 2 s, 4 s, 8 s...
-                            if (attempt < MAX_ATTEMPTS - 1) delay(wait.coerceIn(1000, 60_000))
-                            continue
-                        }
-                    }
-                }
-            } catch (e: GeminiApiException) {
-                throw e
-            } catch (e: IOException) {
-                lastError = e
+        for (attempt in 0 until 2) {
+            val reply = TtsQuota.send { GeminiHttp.postJson("${GeminiHttp.BASE}/interactions", apiKey, body) }
+            if (reply.ok) {
+                val audio = extractAudio(mapper.readTree(reply.text))
+                if (audio != null && audio.isNotEmpty()) return audio
+                lastError = IOException("La respuesta no contenía audio")
+                continue
             }
-            if (attempt < MAX_ATTEMPTS - 1) delay(1500L shl attempt)
+            val message = errorMessage(reply)
+            throw when (reply.code) {
+                401, 403 -> GeminiApiException(reply.code, "Gemini: clave o región no válidas ($message)", fatal = true)
+                else -> GeminiApiException(reply.code, "Gemini TTS: $message", fatal = false)
+            }
         }
         throw lastError
     }
