@@ -87,9 +87,13 @@ import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.image.AsyncDrawable
 import io.noties.markwon.image.AsyncDrawableSpan
 import io.noties.markwon.image.ImageSizeResolver
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
@@ -544,6 +548,66 @@ class ReadActivityViewModel : ViewModel() {
         )
         set(value) = setKey(EPUB_CURRENT_ML, book.title(), value)
 
+    /**
+     * `true` tras pulsar la cruz de la pantalla de traducción. Mientras esté activo no se lanza
+     * ninguna traducción nueva (solo se sirve lo que ya está en caché): los capítulos se muestran
+     * en su texto original. Solo se desactiva al pulsar "Aplicar" en los ajustes de traducción
+     * (o al mantenerlo pulsado para retraducir). Es por sesión del lector, no se guarda.
+     */
+    @Volatile
+    var translationStopped = false
+        private set
+
+    /** Traducciones en curso, para poder cancelarlas al pulsar la cruz. */
+    private val activeTranslations = HashSet<Job>()
+
+    private val translationRunningLock = Any()
+    private var runningTranslations = 0
+    private val _translationInProgress = MutableLiveData(false)
+
+    /** `true` mientras hay una traducción de verdad en marcha (no mientras se lee de caché). */
+    val translationInProgress: LiveData<Boolean> = _translationInProgress
+
+    private fun setTranslationRunning(running: Boolean) {
+        synchronized(translationRunningLock) {
+            runningTranslations = maxOf(0, runningTranslations + if (running) 1 else -1)
+            _translationInProgress.postValue(runningTranslations > 0)
+        }
+    }
+
+    private class TranslationStoppedException : Exception("Translation stopped by user")
+
+    /**
+     * Detiene la traducción en curso y bloquea las siguientes hasta que el usuario pulse "Aplicar".
+     * Cancela de verdad la corrutina: los traductores capturan los errores y reintentan, así que
+     * una simple bandera no los pararía.
+     */
+    fun stopTranslation() {
+        translationStopped = true
+        val jobs = synchronized(activeTranslations) { activeTranslations.toList() }
+        jobs.forEach { it.cancel() }
+    }
+
+    /**
+     * Ejecuta [block] en una corrutina hija que [stopTranslation] puede cancelar sin cancelar a
+     * quien llama; en ese caso lanza [TranslationStoppedException].
+     */
+    private suspend fun <T> runStoppable(block: suspend () -> T): T = coroutineScope {
+        val job = async { block() }
+        synchronized(activeTranslations) { activeTranslations.add(job) }
+        // la cruz se pulsó justo entre la comprobación y el registro del job
+        if (translationStopped) job.cancel()
+        try {
+            job.await()
+        } catch (e: CancellationException) {
+            // si quien cancela es el llamador (no la cruz) se propaga tal cual
+            currentCoroutineContext().ensureActive()
+            throw TranslationStoppedException()
+        } finally {
+            synchronized(activeTranslations) { activeTranslations.remove(job) }
+        }
+    }
+
     private val _chapterData: MutableLiveData<ChapterUpdate> =
         MutableLiveData<ChapterUpdate>(null)
     val chapter: LiveData<ChapterUpdate> = _chapterData
@@ -716,6 +780,8 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun reTranslateChapter(index: Int) = ioSafe {
+        // Es una acción manual desde "Aplicar" (pulsación larga): reanuda la traducción
+        translationStopped = false
         hasExpanded.clear() // will unfuck the rest
         // Use the same full-screen loading indicator as "Aplicar" (postLoading = true) so the
         // user actually sees that a retranslation is happening, instead of it silently updating
@@ -1216,9 +1282,26 @@ class ReadActivityViewModel : ViewModel() {
                 if(cachedData != null) return cachedData
             }
 
+            // Sin traducir: texto original con las sustituciones aplicadas
+            fun untranslated(): Pair<Spanned, ArrayList<TextSpan>> =
+                applyReplacementsWithoutTranslation(spans, beforeRules + afterRules)
+                    ?: (text to spans)
+
+            // Traducción detenida con la cruz: no se traduce nada nuevo hasta que se pulse "Aplicar"
+            // (lo que ya está en caché sí se sirve, arriba, porque no cuesta traducir)
+            if (translationStopped) return untranslated()
+
+            val usesOnlineEngine = currentSettings.useOnlineTranslation ||
+                    currentSettings.useDeepLTranslation ||
+                    currentSettings.useAiTranslation
+            val offlineTranslator =
+                if (usesOnlineEngine) null else (mlTranslator ?: return untranslated())
 
             // Avisa al progreso de la UI y a la notificación del servicio en primer plano
             suspend fun reportProgress(chapter: Int, progress: Int, total: Int) {
+                // Corta aquí si se pulsó la cruz: los traductores se tragan las excepciones de sus
+                // peticiones y reintentan, pero este punto lo llaman entre trozos
+                currentCoroutineContext().ensureActive()
                 ReaderTranslationKeepAlive.update(
                     book.getChapterTitle(chapter).asStringNull(context) ?: book.title(),
                     progress,
@@ -1231,78 +1314,82 @@ class ReadActivityViewModel : ViewModel() {
             // servicio en primer plano: sin él Android congela la red al salir de la app y la
             // traducción se queda parada hasta volver. El finally garantiza que siempre se libera.
             ReaderTranslationKeepAlive.begin(book.title())
+            setTranslationRunning(true)
             val translatedList: List<String> = try {
-                // --- Online mode ---
-                if (currentSettings.useOnlineTranslation) {
-                    translateSkippingBlank(
-                        sourceLines,
-                        beforeRules.isNotEmpty()
-                    ) { lines ->
-                        GoogleTranslateOnline.onlineTranslate(
-                            lines,
+                runStoppable {
+                    // --- Online mode ---
+                    if (currentSettings.useOnlineTranslation) {
+                        translateSkippingBlank(
+                            sourceLines,
+                            beforeRules.isNotEmpty()
+                        ) { lines ->
+                            GoogleTranslateOnline.onlineTranslate(
+                                lines,
+                                currentSettings.from,
+                                currentSettings.to
+                            ) { progress, total ->
+                                reportProgress(spans[0].index, progress, total)
+                            }
+                        }
+                    }
+
+                    // --- DeepL mode (ya omite los párrafos vacíos y devuelve el mismo tamaño) ---
+                    else if (currentSettings.useDeepLTranslation) {
+                        DeepLTranslate.deeplTranslate(
+                            sourceLines,
+                            mlDeepLApiKey,
                             currentSettings.from,
                             currentSettings.to
                         ) { progress, total ->
                             reportProgress(spans[0].index, progress, total)
                         }
                     }
-                }
 
-                // --- DeepL mode (ya omite los párrafos vacíos y devuelve el mismo tamaño) ---
-                else if (currentSettings.useDeepLTranslation) {
-                    DeepLTranslate.deeplTranslate(
-                        sourceLines,
-                        mlDeepLApiKey,
-                        currentSettings.from,
-                        currentSettings.to
-                    ) { progress, total ->
-                        reportProgress(spans[0].index, progress, total)
+                    // --- AI mode ---
+                    else if (currentSettings.useAiTranslation) {
+                        translateSkippingBlank(
+                            sourceLines,
+                            beforeRules.isNotEmpty()
+                        ) { lines ->
+                            GeminiTranslate.geminiTranslate(
+                                lines,
+                                mlAiApiKey,
+                                mlAiModel,
+                                currentSettings.from,
+                                currentSettings.to,
+                                mlAiPrompt,
+                                thinkingLevel = GeminiThinkingLevel.fromName(mlAiThinkingLevel),
+                                temperature = mlAiTemperature,
+                                topP = mlAiTopP,
+                                topK = mlAiTopK,
+                                maxRequestsPerMinute = mlAiMaxRequestsPerMinute,
+                                backupModel = mlAiBackupModel,
+                                maxCharsPerRequest = mlAiMaxCharsPerRequest
+                            ) { progress, total ->
+                                reportProgress(spans[0].index, progress, total)
+                            }
+                        }
                     }
-                }
 
-                // --- AI mode ---
-                else if (currentSettings.useAiTranslation) {
-                    translateSkippingBlank(
-                        sourceLines,
-                        beforeRules.isNotEmpty()
-                    ) { lines ->
-                        GeminiTranslate.geminiTranslate(
-                            lines,
-                            mlAiApiKey,
-                            mlAiModel,
-                            currentSettings.from,
-                            currentSettings.to,
-                            mlAiPrompt,
-                            thinkingLevel = GeminiThinkingLevel.fromName(mlAiThinkingLevel),
-                            temperature = mlAiTemperature,
-                            topP = mlAiTopP,
-                            topK = mlAiTopK,
-                            maxRequestsPerMinute = mlAiMaxRequestsPerMinute,
-                            backupModel = mlAiBackupModel,
-                            maxCharsPerRequest = mlAiMaxCharsPerRequest
-                        ) { progress, total ->
-                            reportProgress(spans[0].index, progress, total)
+                    // --- Offline mode ---
+                    else {
+                        val translator = checkNotNull(offlineTranslator)
+                        spans.mapIndexed { i,  span ->
+                            reportProgress(span.index, i, spans.size)
+                            val line = sourceLines[i]
+                            if (line.isBlank()) return@mapIndexed line
+                            try {
+                                Tasks.await(translator.translate(line))
+                            } catch (t: ExecutionException) {
+                                throw t.cause ?: t
+                            }
                         }
                     }
                 }
-
-                // --- Offline mode ---
-                else {
-                    val translator = mlTranslator
-                        ?: return applyReplacementsWithoutTranslation(spans, beforeRules + afterRules)
-                            ?: (text to spans)
-                    spans.mapIndexed { i,  span ->
-                        reportProgress(span.index, i, spans.size)
-                        val line = sourceLines[i]
-                        if (line.isBlank()) return@mapIndexed line
-                        try {
-                            Tasks.await(translator.translate(line))
-                        } catch (t: ExecutionException) {
-                            throw t.cause ?: t
-                        }
-                    }
-                }
+            } catch (_: TranslationStoppedException) {
+                return untranslated()
             } finally {
+                setTranslationRunning(false)
                 ReaderTranslationKeepAlive.end()
             }
 
@@ -1367,6 +1454,8 @@ class ReadActivityViewModel : ViewModel() {
     }
 
     fun applyMLSettings(allowDownload: Boolean) = ioSafe {
+        // "Aplicar" es la única forma de reanudar una traducción detenida con la cruz
+        translationStopped = false
         val settings = MLSettings(from = mlFromLanguage, to = mlToLanguage, mlUseOnlineTransaltion, mlUseAiTranslation, mlUseDeepLTranslation)
         if (settings.isValid() && allowDownload && safeAsync { requireMLDownload() } == true) {
             _loadingStatus.postValue(Resource.Loading("Downloading language"))

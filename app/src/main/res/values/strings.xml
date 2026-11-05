@@ -298,6 +298,8 @@
     <string name="ai_temperature_format">Temperatura: %.2f</string>
     <string name="ai_top_p_format">Top-P: %.2f</string>
     <string name="ai_top_k_format">Top-K: %d</string>
+    <string name="stop_translation">Stop translation</string>
+    <string name="translation_stopped">Translation stopped. Press “Apply” in the translation settings to resume it.</string>
     <string name="retranslating_chapter">Retraduciendo capítulo…</string>
     <string name="show_original_text">Ver texto original</string>
     <string name="show_translated_text">Ver traducción</string>

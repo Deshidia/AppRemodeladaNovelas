@@ -852,20 +852,6 @@ Translator: Rainbow Turtle" />
                                 android:visibility="gone" />
                         </LinearLayout>
 
-                        <!-- Pestaña Actores: voz de cada personaje para el TTS de Gemini (se rellena por código) -->
-                        <LinearLayout
-                            android:id="@+id/result_actors_holder"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/white_card"
-                            android:minHeight="500dp"
-                            android:orientation="vertical"
-                            android:paddingHorizontal="5dp"
-                            android:paddingTop="10dp"
-                            android:paddingBottom="16dp"
-                            android:visibility="gone"
-                            tools:visibility="gone" />
-
                     </LinearLayout>
                 </FrameLayout>
             </LinearLayout>

@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Texto que faltaba: lo usa layout/read_main.xml (@string/stop_translation). Archivo aparte para no tocar strings.xml. -->
-<resources>
-    <string name="stop_translation">Stop translation</string>
-</resources>
