@@ -5,7 +5,6 @@ import com.lagradost.quicknovel.ErrorLoadingException
 import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
-import com.lagradost.quicknovel.Score
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.fixUrlNull
 import com.lagradost.quicknovel.newChapterData
@@ -14,7 +13,7 @@ import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
 import org.jsoup.Jsoup
 
-object ScribblehubProvider : MainAPI() {
+class ScribblehubProvider : MainAPI() {
     override val rateLimitTime: Long = 1000L
     override val name = "Scribblehub"
     override val iconId = R.drawable.icon_scribblehub
@@ -28,23 +27,21 @@ object ScribblehubProvider : MainAPI() {
         mainCategory: String?,
         orderBy: String?,
         tag: String?
-    ): HeadMainPageResponse {
+    ): HeadMainPageResponse
+    {
         val url = "$mainUrl/?pg=$page"
         val document = app.get(url).document
-        val returnValue =
-            document.select("table#main_releases > tbody > tr, table#main_releases > tr")
-                .mapNotNull { select ->
-                    val a = select.selectFirst("a.fp_title") ?: return@mapNotNull null
-                    newSearchResponse(
-                        name = a.text(),
-                        url = a.attr("href")
-                    ) {
-                        posterUrl = fixUrlNull(select.selectFirst("img")?.attr("src"))
-                    }
-                }
+        val returnValue = document.select("table#main_releases > tbody > tr, table#main_releases > tr").mapNotNull { select ->
+            val a = select.selectFirst("a.fp_title") ?: return@mapNotNull null
+            newSearchResponse(
+                name = a.text(),
+                url = a.attr("href")
+            ) {
+                posterUrl = fixUrlNull(select.selectFirst("img")?.attr("src"))
+            }
+        }
         return HeadMainPageResponse(url, returnValue)
     }
-
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/series-finder/?sf=1&sh=$query"
         val document = app.get(url).document
@@ -53,10 +50,8 @@ object ScribblehubProvider : MainAPI() {
 
             newSearchResponse(a.text(), a.attr("href")) {
                 posterUrl = fixUrlNull(item.selectFirst("div.search_img img")?.attr("src"))
-                score = Score.from5(item.selectFirst("span.search_ratings")?.text()?.trim('(', ')'))
-                latestChapter =
-                    item.select("span.nl_stat").firstOrNull { it.text().contains("Chapters:") }
-                        ?.text()
+                rating = item.selectFirst("span.search_ratings")?.text()?.trim('(', ')')?.toFloatOrNull()?.times(200)?.toInt()
+                latestChapter = item.select("span.nl_stat").firstOrNull { it.text().contains("Chapters:") }?.text()
             }
         }
     }
@@ -106,7 +101,7 @@ object ScribblehubProvider : MainAPI() {
             synopsis = document.selectFirst("div.wi_fic_desc")?.text()
             val ratings = document.select("span#ratefic_user > span > span")
             tags = document.select("span.wi_fic_genre > span > a.fic_genre").map { it.text() }
-            score = Score.from5(ratings.first()?.text())
+            rating = ratings.first()?.text()?.toFloatOrNull()?.times(200)?.toInt()
             peopleVoted =
                 ratings.getOrNull(1)?.selectFirst("> span")?.text()?.replace(" ratings", "")
                     ?.toIntOrNull()

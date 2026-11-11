@@ -1,30 +1,16 @@
 package com.lagradost.quicknovel.providers
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.lagradost.quicknovel.ChapterData
-import com.lagradost.quicknovel.HeadMainPageResponse
-import com.lagradost.quicknovel.LoadResponse
-import com.lagradost.quicknovel.MainAPI
-import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.Score
-import com.lagradost.quicknovel.SearchResponse
-import com.lagradost.quicknovel.UserReview
-import com.lagradost.quicknovel.fixUrlNull
-import com.lagradost.quicknovel.newChapterData
-import com.lagradost.quicknovel.newReview
-import com.lagradost.quicknovel.newSearchResponse
-import com.lagradost.quicknovel.newStreamResponse
-import com.lagradost.quicknovel.setStatus
+import com.lagradost.quicknovel.*
 import com.lagradost.quicknovel.util.AppUtils.parseJson
 import org.jsoup.Jsoup
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
-object RanobeHubProvider : RanobeHubAPI()
-
-open class RanobeHubAPI : MainAPI() {
+open class RanobeHubProvider : MainAPI() {
     override val name = "RanobeHub"
     override val mainUrl = "https://ranobehub.org"
     override val iconId = R.drawable.icon_ranobehub
@@ -78,8 +64,8 @@ open class RanobeHubAPI : MainAPI() {
                     ?: item.names.original!!
 
                 newSearchResponse(title, "/ranobe/${item.id}") {
-                    posterUrl = fixUrlNull(item.poster?.medium)
-                    score = Score.from10(item.rating)
+                    this.posterUrl = fixUrlNull(item.poster?.medium)
+                    this.rating = item.rating?.let { (it * 100).toInt() }
                 }
             })
         }
@@ -128,11 +114,11 @@ open class RanobeHubAPI : MainAPI() {
         }
 
         return newStreamResponse(title, url, chapters) {
-            posterUrl = fixUrlNull(response.posters?.medium)
-            author = response.authors?.firstOrNull()?.nameEng
-            synopsis = response.description
-            score = Score.from10(response.rating)
-            tags = response.tags?.let { tags ->
+            this.posterUrl = fixUrlNull(response.posters?.medium)
+            this.author = response.authors?.firstOrNull()?.nameEng
+            this.synopsis = response.description
+            this.rating = response.rating?.let { (it * 100).toInt() }
+            this.tags = response.tags?.let { tags ->
                 (tags.genres.map { it.names.rus ?: it.names.eng ?: it.title } +
                         tags.events.map { it.names.rus ?: it.names.eng ?: it.title })
             }

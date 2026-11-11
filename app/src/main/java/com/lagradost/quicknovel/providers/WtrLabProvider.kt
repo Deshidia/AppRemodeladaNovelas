@@ -8,7 +8,6 @@ import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.Score
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.fixUrlNull
@@ -25,7 +24,7 @@ import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
 
 
-object WtrLabProvider : MainAPI() {
+class WtrLabProvider : MainAPI() {
     override val mainUrl = "https://wtr-lab.com"
     override val name = "WTR-LAB"
     override val lang = "en"
@@ -197,8 +196,10 @@ object WtrLabProvider : MainAPI() {
             peopleVoted = ratingText?.let { text ->
                 Regex("""\((\d+)""").find(text)?.groupValues?.get(1)?.toIntOrNull()
             }
-            score = ratingText?.let { text ->
-                Score.from5(Regex("""([\d.]+)""").find(text)?.groupValues?.get(1))
+            rating = ratingText?.let { text ->
+                Regex("""([\d.]+)""").find(text)?.groupValues?.get(1)?.toFloatOrNull()?.let {
+                    it.times(20).times(10).roundToInt()
+                }
             }
             reviewData = id
             related = getRelated(url, id)
@@ -236,7 +237,7 @@ object WtrLabProvider : MainAPI() {
             newReview(reviewTxt) {
                 username = item.username
                 date = item.createdAt
-                score = Score.from5(item.rate)
+                rating = item.rate?.times(200)
             }
         } ?: emptyList()
     }

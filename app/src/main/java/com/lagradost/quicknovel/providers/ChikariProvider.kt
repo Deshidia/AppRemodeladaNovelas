@@ -6,7 +6,6 @@ import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.Score
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.newChapterData
@@ -15,10 +14,11 @@ import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
 import java.net.URLEncoder
 
-object ChikariProvider : MainAPI() {
+class ChikariProvider : MainAPI() {
     override val name = "Chikari"
     override val mainUrl = "https://chikari.moe"
     private val apiUrl = "$mainUrl/api"
+    private val postersUrl = "https://cdn.chikari.moe/novels"
     override val iconId = R.drawable.icon_chikari
     override val hasMainPage = true
     override val hasReviews = true
@@ -40,12 +40,14 @@ object ChikariProvider : MainAPI() {
                 name = item.title,
                 url = "$mainUrl/novels/${item.slug}/"
             ) {
-                posterUrl = item.cover
+                posterUrl = "$postersUrl/${item.id}/cover.webp"
             }
         }.orEmpty()
        
         return HeadMainPageResponse(url, novels)
     }
+
+
 
     override suspend fun load(url: String): LoadResponse {
         val slug = url.removeSuffix("/").substringAfterLast("/")
@@ -54,12 +56,13 @@ object ChikariProvider : MainAPI() {
 
         return newStreamResponse(data.title, url, chapters) {
             author = data.authors?.joinToString { it.name ?: "" }
-            posterUrl = data.cover
+            posterUrl = "$postersUrl/${data.id}/cover.webp"
             synopsis = data.description
             tags = (data.genres?.mapNotNull { it.name } ?: emptyList()) + (data.tags?.mapNotNull { it.name } ?: emptyList())
             setStatus(data.status)
-            score = Score.from10(data.rating)
+            rating = (data.rating?.times(100))?.toInt()
         }
+
     }
 
     private suspend fun loadAllChapters(slug: String): List<ChapterData> {
@@ -94,7 +97,7 @@ object ChikariProvider : MainAPI() {
                 name = item.title,
                 url = "$mainUrl/novels/${item.slug}/"
             ) {
-                posterUrl = item.cover
+                posterUrl = "$postersUrl/${item.id}/cover.webp"
             }
         }.orEmpty()
     }
@@ -126,8 +129,7 @@ object ChikariProvider : MainAPI() {
         @JsonProperty("slug") val slug: String,
         @JsonProperty("title") val title: String,
         @JsonProperty("type") val type: String?,
-        @JsonProperty("status") val status: String?,
-        @JsonProperty("cover_url") val cover: String?,
+        @JsonProperty("status") val status: String?
     )
 
     data class ApiNovelDetails(
@@ -138,8 +140,7 @@ object ChikariProvider : MainAPI() {
         @JsonProperty("status") val status: String?,
         @JsonProperty("genres") val genres: List<ApiGenre>?,
         @JsonProperty("tags") val tags: List<ApiTag>?,
-        @JsonProperty("rating") val rating: Float?,
-        @JsonProperty("cover_url") val cover: String?,
+        @JsonProperty("rating") val rating: Float?
     )
 
     data class ApiAuthor(@JsonProperty("name") val name: String?)

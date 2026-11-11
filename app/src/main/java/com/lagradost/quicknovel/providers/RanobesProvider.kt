@@ -6,7 +6,7 @@ import com.lagradost.quicknovel.util.AppUtils.parseJson
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
-object RanobesProvider : MainAPI() {
+class RanobesProvider : MainAPI() {
     override val name = "Ranobes"
     override val mainUrl = "https://ranobes.net"
     override val hasMainPage = true
@@ -141,10 +141,8 @@ object RanobesProvider : MainAPI() {
                 it.text()
             }
             try {
-                score = Score.from5(
-                    document.selectFirst("#rate_b > div > div > div > span.bold")?.text()
-                        ?.substringBefore("/")
-                )
+                rating = (document.selectFirst("#rate_b > div > div > div > span.bold")?.text()
+                    ?.substringBefore("/")?.toFloatOrNull()?.times(200))?.toInt()!!
 
                 peopleVoted = document.selectFirst("div.rate-stat-num > span.small.grey")?.text()!!
                     .filter { it.isDigit() }.toInt()

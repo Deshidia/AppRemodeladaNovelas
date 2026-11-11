@@ -3,7 +3,7 @@ package com.lagradost.quicknovel.providers
 import com.lagradost.quicknovel.*
 import org.jsoup.nodes.Element
 
-object SonicMTLProvider : MainAPI() {
+class SonicMTLProvider : MainAPI() {
     override val name = "SonicMTL"
     override val mainUrl = "https://www.sonicmtl.com"
     override val hasMainPage = true
@@ -99,7 +99,7 @@ object SonicMTLProvider : MainAPI() {
 
             newSearchResponse(name = name, url = titleA.attr("href")) {
                 posterUrl = h.selectFirst("div.tab-thumb img").getImage()
-                score = Score.from5(ratingTxt)
+                rating = ratingTxt?.toFloatOrNull()?.let { (it * 200).toInt() }
             }
         }
     }
@@ -123,8 +123,7 @@ object SonicMTLProvider : MainAPI() {
             author = document.selectFirst("div.author-content > a")?.text()
 
             // Selección robusta de sinopsis
-            val synopsisParts =
-                document.select(".summary__content p, #editdescription p, .j_synopsis p")
+            val synopsisParts = document.select(".summary__content p, #editdescription p, .j_synopsis p")
             synopsis = synopsisParts
                 .map { it.text().trim() }
                 .filter { it.isNotEmpty() && !it.contains(mainUrl, ignoreCase = true) }
@@ -133,8 +132,7 @@ object SonicMTLProvider : MainAPI() {
             setStatus(document.select("div.post-status .summary-content").lastOrNull()?.text())
             posterUrl = document.selectFirst("div.summary_image img").getImage()
 
-            rating =
-                (document.selectFirst("#averagerate")?.text()?.toFloatOrNull()?.times(200))?.toInt()
+            rating = (document.selectFirst("#averagerate")?.text()?.toFloatOrNull()?.times(200))?.toInt()
 
             // Lógica de conteo de votos (9.3K -> 9300)
             document.selectFirst("#countrate")?.text()?.let { votes ->

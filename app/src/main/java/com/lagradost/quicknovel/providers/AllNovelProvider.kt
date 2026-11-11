@@ -5,7 +5,6 @@ import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.R
-import com.lagradost.quicknovel.Score
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.fixUrlNull
 import com.lagradost.quicknovel.newChapterData
@@ -14,9 +13,7 @@ import com.lagradost.quicknovel.newStreamResponse
 import com.lagradost.quicknovel.setStatus
 import kotlin.math.roundToInt
 
-object AllNovelProvider : AllNovelAPI()
-
-open class AllNovelAPI : MainAPI() {
+open class AllNovelProvider : MainAPI() {
     override val name = "AllNovel"
     override val mainUrl = "https://allnovel.org"
     override val hasMainPage = true
@@ -187,7 +184,7 @@ open class AllNovelAPI : MainAPI() {
             if (cUrl.isNullOrBlank()) {
                 cUrl = c.attr("href")
             }
-            if (cUrl.isBlank()) {
+            if (cUrl.isNullOrBlank()) {
                 return@mapNotNull null
             }
             val cName = c.text().ifEmpty {
@@ -211,9 +208,11 @@ open class AllNovelAPI : MainAPI() {
             peopleVoted =
                 document.selectFirst(" div.small > em > strong:nth-child(3) > span")?.text()
                     ?.toIntOrNull() ?: 0
-            score = Score.from10(document.selectFirst("div.small > em > strong:nth-child(1) > span")?.text())
+            rating = document.selectFirst("div.small > em > strong:nth-child(1) > span")?.text()
+                ?.toFloatOrNull()?.times(100)?.roundToInt()
 
             setStatus(infoDivs.find { it.text().contains("Status:") }?.selectFirst("a")?.text())
+
         }
     }
 }
