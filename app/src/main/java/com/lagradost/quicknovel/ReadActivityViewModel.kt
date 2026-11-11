@@ -101,6 +101,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import me.ag2s.epublib.domain.EpubBook
 import me.ag2s.epublib.domain.TOCReference
 import me.ag2s.epublib.epub.EpubReader
@@ -1477,6 +1478,92 @@ class ReadActivityViewModel : ViewModel() {
             restorePosition = true
         )
     }
+
+    /**
+     * Texto (original, traducido) del capítulo que se está leyendo, o null si no hay traducción
+     * activa: sin ajustes válidos, con la traducción detenida por la cruz, si el capítulo aún
+     * no se cargó, o si lo que se muestra sigue siendo el original (la traducción falló o no se
+     * aplicó). Es lo que la lista de términos sin traducir del lector usa para detectar las
+     * palabras que quedaron en el idioma original.
+     */
+    suspend fun currentChapterTexts(): Pair<String, String>? = withContext(Dispatchers.IO) {
+        val index = currentIndex
+        if (index == Int.MIN_VALUE || !::book.isInitialized) return@withContext null
+        if (mlSettings.isInvalid() || translationStopped) return@withContext null
+        val live =
+            (chapterMutex.withLock { chapterData[index] } as? Resource.Success<LiveChapterData>)
+                ?: return@withContext null
+        val value = live.value
+        val original = value.originalRendered.toString()
+        val translated = value.rendered.toString()
+        // si no cambió nada, no se tradujo (o el traductor devolvió el texto original)
+        if (original.trim() == translated.trim()) return@withContext null
+        original to translated
+    }
+
+    /**
+     * Propuesta de traducción para los términos sin traducir, con el mismo motor que traduce el
+     * capítulo (una sola llamada por lote). Devuelve término -> propuesta, sin incluir los que
+     * el motor devuelve igual (nombres que no sabe traducir): para esos el campo queda vacío y
+     * el usuario escribe la suya.
+     */
+    suspend fun suggestTermTranslations(terms: List<String>): Map<String, String> =
+        withContext(Dispatchers.IO) {
+            val settings = mlSettings
+            if (settings.isInvalid() || terms.isEmpty()) return@withContext emptyMap()
+            try {
+                val translated: List<String> = when {
+                    settings.useOnlineTranslation ->
+                        GoogleTranslateOnline.onlineTranslate(terms, settings.from, settings.to)
+
+                    settings.useDeepLTranslation ->
+                        DeepLTranslate.deeplTranslate(
+                            terms,
+                            mlDeepLApiKey,
+                            settings.from,
+                            settings.to
+                        )
+
+                    settings.useAiTranslation ->
+                        GeminiTranslate.geminiTranslate(
+                            terms,
+                            mlAiApiKey,
+                            mlAiModel,
+                            settings.from,
+                            settings.to,
+                            mlAiPrompt,
+                            thinkingLevel = GeminiThinkingLevel.fromName(mlAiThinkingLevel),
+                            temperature = mlAiTemperature,
+                            topP = mlAiTopP,
+                            topK = mlAiTopK,
+                            maxRequestsPerMinute = mlAiMaxRequestsPerMinute,
+                            backupModel = mlAiBackupModel,
+                            maxCharsPerRequest = mlAiMaxCharsPerRequest
+                        )
+
+                    // traductor offline (ML Kit) si es el que se está usando
+                    else -> mlTranslator?.let { translator ->
+                        terms.map { term ->
+                            try {
+                                Tasks.await(translator.translate(term))
+                            } catch (t: Exception) {
+                                term
+                            }
+                        }
+                    } ?: return@withContext emptyMap()
+                }
+
+                if (translated.size != terms.size) return@withContext emptyMap()
+                terms.mapIndexed { i, term -> term to (translated.getOrNull(i)?.trim() ?: "") }
+                    .filter { (term, proposal) ->
+                        proposal.isNotEmpty() && !proposal.equals(term, ignoreCase = true)
+                    }
+                    .toMap()
+            } catch (t: Throwable) {
+                logError(t)
+                emptyMap()
+            }
+        }
 
     /** Título con el que se guardan las sustituciones de este libro (null si aún no se cargó). */
     fun replacementsNovelName(): String? =

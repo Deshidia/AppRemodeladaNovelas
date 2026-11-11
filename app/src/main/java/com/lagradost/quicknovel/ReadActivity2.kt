@@ -334,6 +334,17 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     private lateinit var textAdapter: TextAdapter
     private lateinit var textLayoutManager: LinearLayoutManager
 
+    /** Menú lateral con los términos sin traducir del capítulo actual (swipe izquierda→derecha). */
+    private lateinit var untranslatedDrawer: UntranslatedTermsDrawer
+
+    // inicio del gesto en curso, para detectar el deslizamiento horizontal
+    private var swipeStartX = 0f
+    private var swipeStartY = 0f
+    private var swipeStartTime = 0L
+
+    /** Distancia mínima (en px) para que un deslizamiento a la derecha abra el menú. */
+    private val swipeMinDistance = 90.toPx
+
     private fun transformIndexToScrollVisibilityItem(adapterPosition: Int): ScrollVisibilityItem {
         return ScrollVisibilityItem(
             adapterPosition = adapterPosition,
@@ -732,6 +743,14 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         onBackPressedDispatcher.addCallback(this) {
             exitReader()
         }
+
+        // el menú de términos sin traducir se cierra con el botón atrás antes de salir del lector
+        untranslatedDrawer = UntranslatedTermsDrawer(this, binding, viewModel)
+        untranslatedDrawer.setup()
+        val drawerBackCallback = onBackPressedDispatcher.addCallback(this, enabled = false) {
+            untranslatedDrawer.close()
+        }
+        untranslatedDrawer.onStateChanged = { open -> drawerBackCallback.isEnabled = open }
 
         viewModel.init(intent, this)
         topBarHeight = binding.readToolbarHolder.minimumHeight + getStatusBarHeight()
@@ -1139,6 +1158,30 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             itemAnimator = null
             // testing overscroll
             setOnTouchListener { _, event ->
+                // deslizar de izquierda a derecha: abrir el menú de términos sin traducir.
+                // Se observa sin consumir el evento: el scroll vertical sigue igual.
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        swipeStartX = event.x
+                        swipeStartY = event.y
+                        swipeStartTime = event.eventTime
+                    }
+
+                    MotionEvent.ACTION_UP -> {
+                        currentOverScroll = 0.0f
+                        val dx = event.x - swipeStartX
+                        val dy = event.y - swipeStartY
+                        if (dx >= swipeMinDistance && dx.absoluteValue > dy.absoluteValue * 2 &&
+                            event.eventTime - swipeStartTime <= 1200L &&
+                            !untranslatedDrawer.isOpen
+                        ) {
+                            untranslatedDrawer.open()
+                        }
+                    }
+
+                    else -> {}
+                }
+
                 when (event.action) {
                     MotionEvent.ACTION_MOVE -> {
                         if (event.historySize <= 1) return@setOnTouchListener false
@@ -1166,10 +1209,6 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         }
 
                         return@setOnTouchListener false
-                    }
-
-                    MotionEvent.ACTION_UP -> {
-                        currentOverScroll = 0.0f
                     }
 
                     else -> {}

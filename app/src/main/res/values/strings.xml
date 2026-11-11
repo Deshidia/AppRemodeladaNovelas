@@ -449,4 +449,22 @@
     <string name="translation_channel_name">Chapter translation</string>
     <string name="translation_channel_description">Shown while the reader translates a chapter in the background</string>
     <string name="translation_in_background">Translating in the background</string>
+
+    <!-- Untranslated-terms drawer in the reader (opened by swiping left to right) -->
+    <string name="untranslated_title">Untranslated terms</string>
+    <string name="untranslated_close">Close</string>
+    <string name="untranslated_term_edit">Enter translation</string>
+    <string name="untranslated_count_format">×%d</string>
+    <string name="untranslated_searching">Searching translation…</string>
+    <string name="untranslated_proposal">Proposal: %s</string>
+    <string name="untranslated_write">Tap to enter the translation</string>
+    <string name="untranslated_saved_row">Added to Replace: %s</string>
+    <string name="untranslated_none">No untranslated terms were found in this chapter</string>
+    <string name="untranslated_not_translated">This chapter has no active translation: the untranslated terms list is only available once the chapter is translated</string>
+    <string name="untranslated_dialog_hint">Spanish translation</string>
+    <string name="untranslated_dialog_note">It will be added to Replace → After translating, and the chapter is corrected as soon as you accept.</string>
+    <string name="untranslated_accept">Add to Replace</string>
+    <string name="untranslated_saved">Replacement added: %1$s → %2$s</string>
+    <string name="untranslated_need_translation">Enter the translation before accepting</string>
+    <string name="untranslated_note">Replacements are saved for this book, so they also apply to the next chapters. You can edit them in Settings → Replace.</string>
 </resources>

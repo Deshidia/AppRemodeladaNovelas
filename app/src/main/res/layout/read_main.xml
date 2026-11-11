@@ -463,4 +463,114 @@
                 tools:title="TEST" />
         </com.google.android.material.appbar.AppBarLayout>
     </FrameLayout>
+
+    <!-- Menú lateral de términos sin traducir: se abre deslizando de izquierda a derecha -->
+    <FrameLayout
+        android:id="@+id/untranslated_drawer_root"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        tools:visibility="gone">
+
+        <View
+            android:id="@+id/untranslated_scrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/untranslatedScrim" />
+
+        <LinearLayout
+            android:id="@+id/untranslated_drawer"
+            android:layout_width="300dp"
+            android:layout_height="match_parent"
+            android:background="?attr/primaryGrayBackground"
+            android:clickable="true"
+            android:elevation="16dp"
+            android:focusable="true"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="16dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/untranslated_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/untranslated_title"
+                        android:textColor="?attr/textColor"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/untranslated_subtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="?attr/grayTextColor"
+                        android:textSize="12sp"
+                        tools:text="Capítulo 12 - The Spirit Stones" />
+                </LinearLayout>
+
+                <ImageButton
+                    android:id="@+id/untranslated_close"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/untranslated_close"
+                    android:padding="10dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/close_24px"
+                    app:tint="?attr/textColor" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/untranslated_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="24dp"
+                android:textColor="?attr/grayTextColor"
+                android:textSize="14sp"
+                android:visibility="gone"
+                tools:text="@string/untranslated_none"
+                tools:visibility="visible" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/untranslated_list"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:paddingBottom="12dp"
+                tools:listitem="@layout/item_untranslated_term" />
+
+            <TextView
+                android:id="@+id/untranslated_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/primaryBlackBackground"
+                android:paddingStart="16dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="10dp"
+                android:text="@string/untranslated_note"
+                android:textColor="?attr/grayTextColor"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </FrameLayout>
 </FrameLayout>

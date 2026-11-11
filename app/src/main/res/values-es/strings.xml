@@ -369,4 +369,22 @@
     <string name="translation_channel_name">Traducción de capítulos</string>
     <string name="translation_channel_description">Se muestra mientras el lector traduce un capítulo en segundo plano</string>
     <string name="translation_in_background">Traduciendo en segundo plano</string>
+
+    <!-- Menú lateral de términos sin traducir del lector (se abre deslizando de izquierda a derecha) -->
+    <string name="untranslated_title">Términos sin traducir</string>
+    <string name="untranslated_close">Cerrar</string>
+    <string name="untranslated_term_edit">Escribir traducción</string>
+    <string name="untranslated_count_format">×%d</string>
+    <string name="untranslated_searching">Buscando traducción…</string>
+    <string name="untranslated_proposal">Propuesta: %s</string>
+    <string name="untranslated_write">Toca para escribir la traducción</string>
+    <string name="untranslated_saved_row">Añadido a Sustituir: %s</string>
+    <string name="untranslated_none">No se han encontrado términos sin traducir en este capítulo</string>
+    <string name="untranslated_not_translated">Este capítulo no tiene una traducción activa: la lista de términos sin traducir está disponible cuando el capítulo esté traducido</string>
+    <string name="untranslated_dialog_hint">Traducción al español</string>
+    <string name="untranslated_dialog_note">Se añadirá a Sustituir → Después de traducir, y el capítulo se corregirá en cuanto aceptes.</string>
+    <string name="untranslated_accept">Añadir a Sustituir</string>
+    <string name="untranslated_saved">Sustitución añadida: %1$s → %2$s</string>
+    <string name="untranslated_need_translation">Escribe la traducción antes de aceptar</string>
+    <string name="untranslated_note">Las sustituciones se guardan para este libro, así que también valen para los próximos capítulos. Puedes editarlas en Ajustes → Sustituir.</string>
 </resources>
