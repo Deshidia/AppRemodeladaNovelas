@@ -32,4 +32,15 @@
         android:text="@string/untranslated_dialog_note"
         android:textColor="?attr/grayTextColor"
         android:textSize="12sp" />
+
+    <!-- frase del capítulo con el término, para dar contexto al elegir la traducción -->
+    <TextView
+        android:id="@+id/dialog_untranslated_example"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
+        android:textColor="?attr/grayTextColor"
+        android:textSize="12sp"
+        android:textStyle="italic"
+        android:visibility="gone" />
 </LinearLayout>

@@ -130,6 +130,9 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }.doOnEnd {
             binding.readToolbarHolder.isVisible = false
         }
+
+        // la píldora de búsqueda baja con el menú: que nunca se tapen entre ellos
+        updateSearchPillPosition(false)
     }
 
     private fun showSystemUI() {
@@ -158,6 +161,23 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             duration = 200
             start()
         }
+
+        // la píldora de búsqueda se coloca justo encima del menú desplegado
+        updateSearchPillPosition(true)
+    }
+
+    /**
+     * Mantiene la píldora de la búsqueda del panel en una zona sin texto: justo encima del
+     * menú inferior cuando está desplegado (así se ve también con los menús abiertos) o
+     * cerca del borde si el lector está limpio. Nunca tapa la coincidencia, que siempre se
+     * coloca al inicio de la pantalla.
+     */
+    private fun updateSearchPillPosition(bottomMenuVisible: Boolean) {
+        val pill = binding.untranslatedSearchPill
+        val layoutParams = pill.layoutParams as FrameLayout.LayoutParams
+        layoutParams.bottomMargin =
+            if (bottomMenuVisible) binding.readerBottomViewHolder.height + 8.toPx else 16.toPx
+        pill.layoutParams = layoutParams
     }
 
     lateinit var binding: ReadMainBinding
@@ -428,6 +448,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     private var cachedChapter: List<SpanDisplay> = emptyList()
     private fun scrollToDesired() {
         val desired: ScrollIndex = viewModel.desiredIndex ?: return
+        scrollToScrollIndex(desired)
+    }
+
+    /** Scroll exacto a un punto del capítulo (la misma maquinaria que usan TTS y la rotación). */
+    private fun scrollToScrollIndex(desired: ScrollIndex) {
         val adapterPosition =
             cachedChapter.indexOfFirst { display -> display.index == desired.index && display.innerIndex == desired.innerIndex }
         if (adapterPosition == -1) return
@@ -747,6 +772,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         // el menú de términos sin traducir se cierra con el botón atrás antes de salir del lector
         untranslatedDrawer = UntranslatedTermsDrawer(this, binding, viewModel)
         untranslatedDrawer.setup()
+        // la búsqueda del panel recorre el texto mostrado, navega con el scroll exacto del
+        // lector (el del TTS) y subraya las coincidencias en el texto
+        untranslatedDrawer.searchTextProvider = { cachedChapter.filterIsInstance<TextSpan>() }
+        untranslatedDrawer.onSearchNavigate = { scrollIndex -> scrollToScrollIndex(scrollIndex) }
+        untranslatedDrawer.onSearchHighlight = { highlights, current ->
+            textAdapter.updateSearchHighlights(highlights, current)
+        }
         val drawerBackCallback = onBackPressedDispatcher.addCallback(this, enabled = false) {
             untranslatedDrawer.close()
         }
@@ -1158,7 +1190,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             itemAnimator = null
             // testing overscroll
             setOnTouchListener { _, event ->
-                // deslizar de izquierda a derecha: abrir el menú de términos sin traducir.
+                // deslizar de derecha a izquierda: abrir el menú de términos sin traducir.
                 // Se observa sin consumir el evento: el scroll vertical sigue igual.
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
@@ -1171,7 +1203,7 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                         currentOverScroll = 0.0f
                         val dx = event.x - swipeStartX
                         val dy = event.y - swipeStartY
-                        if (dx >= swipeMinDistance && dx.absoluteValue > dy.absoluteValue * 2 &&
+                        if (dx <= -swipeMinDistance && dx.absoluteValue > dy.absoluteValue * 2 &&
                             event.eventTime - swipeStartTime <= 1200L &&
                             !untranslatedDrawer.isOpen
                         ) {

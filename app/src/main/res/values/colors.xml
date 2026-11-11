@@ -7,6 +7,9 @@
     <color name="roundedTextBorder">#DD0277BD</color>
     <!-- Subrayado del usuario (marcador de lectura). Distinto del azul del resaltado TTS. -->
     <color name="readerUserMark">#FFB300</color>
+    <!-- Coincidencias de la búsqueda del panel de términos (cian: ni ámbar como el
+         marcador ni azul como el resaltado TTS). -->
+    <color name="readerSearchHighlight">#00BCD4</color>
 
     <color name="novelPassionColor">#FFF</color>
     <color name="wuxiaWorldOnlineColor">#24242B</color>

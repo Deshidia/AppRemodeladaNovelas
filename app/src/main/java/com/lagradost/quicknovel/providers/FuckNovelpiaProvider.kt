@@ -13,6 +13,7 @@ import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.fixUrl
 import org.jsoup.nodes.Document
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Proveedor para https://fucknovelpia.com.
@@ -28,7 +29,7 @@ class FuckNovelpiaProvider : MainAPI() {
     override val hasMainPage = true
     override val usesCloudFlareKiller = true
 
-    override val iconId = R.drawable.ic_baseline_public_24
+    override val iconId = R.drawable.icon_fucknovelpia
     override val iconBackgroundId = R.color.subColorBg
 
     override val orderBys: List<Pair<String, String>> = listOf(
@@ -44,10 +45,49 @@ class FuckNovelpiaProvider : MainAPI() {
         Log.e("FuckNovelpia", message, error)
 
     /**
-     * Las respuestas de Cloudflare/anti-scraping no contienen el HTML del sitio.
-     * Detectarlas aquí evita interpretar esas páginas como fichas vacías.
+     * Caché en memoria con caducidad: repetir una búsqueda, volver atrás o seguir leyendo sirve
+     * las páginas de aquí en vez de repetir peticiones que, con Cloudflare, pueden tardar varios
+     * segundos o acabar en un WebView.
      */
-    private suspend fun getDocument(url: String): Document {
+    private class TtlCache<T : Any>(private val ttlMs: Long) {
+        private val entries = ConcurrentHashMap<String, Pair<Long, T>>()
+
+        fun get(key: String): T? {
+            val (savedAt, value) = entries[key] ?: return null
+            return value.takeIf { System.currentTimeMillis() - savedAt <= ttlMs }
+        }
+
+        fun put(key: String, value: T) {
+            entries[key] = System.currentTimeMillis() to value
+        }
+    }
+
+    private companion object {
+        /** Listados (inicio/búsqueda): se reusan un minuto */
+        const val LISTING_TTL_MS = 60_000L
+
+        /** Fichas de novela: la lista de capítulos apenas cambia */
+        const val DETAIL_TTL_MS = 5 * 60_000L
+
+        /** Texto de capítulos: es inmutable */
+        const val CHAPTER_TTL_MS = 30 * 60_000L
+
+        val listingCache = TtlCache<Document>(LISTING_TTL_MS)
+        val detailCache = TtlCache<Document>(DETAIL_TTL_MS)
+        val chapterCache = TtlCache<String>(CHAPTER_TTL_MS)
+    }
+
+    private suspend fun getDocument(url: String, cache: TtlCache<Document>? = null): Document {
+        cache?.get(url)?.let {
+            logD("caché → $url")
+            return it
+        }
+        val document = fetchDocument(url)
+        cache?.put(url, document)
+        return document
+    }
+
+    private suspend fun fetchDocument(url: String): Document {
         val document = app.get(url).document
         val title = document.title().lowercase()
         val body = document.body()?.text()?.lowercase().orEmpty()
@@ -134,20 +174,20 @@ class FuckNovelpiaProvider : MainAPI() {
     ): HeadMainPageResponse {
         val url = listingUrl(query = "", orderBy = orderBy, page = page)
         logD("loadMainPage → $url")
-        val document = getDocument(url)
+        val document = getDocument(url, listingCache)
         return HeadMainPageResponse(url = url, list = parseNovels(document))
     }
 
     override suspend fun search(query: String): List<SearchResponse>? {
         val url = listingUrl(query = query.trim(), orderBy = "newest", page = 1)
         logD("search → $url")
-        val document = getDocument(url)
+        val document = getDocument(url, listingCache)
         return parseNovels(document).ifEmpty { null }
     }
 
     override suspend fun load(url: String): LoadResponse? {
         logD("load → $url")
-        val document = getDocument(url)
+        val document = getDocument(url, detailCache)
 
         val title = document.selectFirst("h1")?.text()?.trim()?.takeIf { it.isNotBlank() }
             ?: document.selectFirst("meta[property='og:title']")?.attr("content")
@@ -230,6 +270,23 @@ class FuckNovelpiaProvider : MainAPI() {
     }
 
     override suspend fun loadHtml(url: String): String? {
+        chapterCache.get(url)?.let {
+            logD("loadHtml → $url (caché)")
+            return it
+        }
+        val html = fetchChapterHtml(url)
+        chapterCache.put(url, html)
+        return html
+    }
+
+    /** Como [loadHtml] pero descargando de nuevo: "Recargar capítulo" no debe servir la caché. */
+    override suspend fun reloadHtml(url: String): String? {
+        val html = fetchChapterHtml(url)
+        chapterCache.put(url, html)
+        return html
+    }
+
+    private suspend fun fetchChapterHtml(url: String): String {
         logD("loadHtml → $url")
         val document = getDocument(url)
         val reader = document.selectFirst(".reader, #chapter-content, .chapter-content")

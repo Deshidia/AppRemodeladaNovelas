@@ -34,6 +34,11 @@ import kotlin.math.min
 /** Valor de la [Annotation] que marca el subrayado del usuario (ver ReaderMark). */
 const val USER_MARK_ANNOTATION = "usermark"
 
+/** Valores de la [Annotation] que marcan las coincidencias de la búsqueda del panel de
+ * términos (ver UntranslatedTermsDrawer): todas menos la que se está visitando, y la actual. */
+const val SEARCH_ANNOTATION = "search"
+const val SEARCH_CURRENT_ANNOTATION = "searchcurrent"
+
 /**
  * A TextView that can draw rounded background to the portions of the text. See
  * [TextRoundedBgHelper] for more information.
@@ -62,6 +67,19 @@ class RoundedBgTextView// PREVENT OVERLAP, SUE ME
     private val userMarkLineThickness = 2.5f.toPx
     private val userMarkLineOffset = 2f.toPx
 
+    // Coincidencias de búsqueda: línea fina bajo el texto; la actual lleva además un tinte
+    private val searchHighlightColor = ContextCompat.getColor(context, R.color.readerSearchHighlight)
+    private val searchLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = searchHighlightColor
+        style = Paint.Style.FILL
+    }
+    private val searchTintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ColorUtils.setAlphaComponent(searchHighlightColor, 0x40)
+        style = Paint.Style.FILL
+    }
+    private val searchLineThickness = 1.8f.toPx
+    private val searchLineOffset = 2f.toPx
+
     init {
         val attributeReader = TextRoundedBgAttributeReader(context, attrs)
         textRoundedBgHelper = TextRoundedBgHelper(
@@ -80,6 +98,7 @@ class RoundedBgTextView// PREVENT OVERLAP, SUE ME
             canvas.withTranslation(totalPaddingLeft.toFloat(), totalPaddingTop.toFloat()) {
                 textRoundedBgHelper.draw(canvas, text as Spanned, layout)
                 drawUserMark(canvas, text as Spanned, layout)
+                drawSearchHighlights(canvas, text as Spanned, layout)
             }
         }
         super.onDraw(canvas)
@@ -126,6 +145,55 @@ class RoundedBgTextView// PREVENT OVERLAP, SUE ME
                     right,
                     underlineTop + userMarkLineThickness,
                     userMarkLinePaint
+                )
+            }
+        }
+    }
+
+    /**
+     * Dibuja las coincidencias de la búsqueda del panel de términos ([SEARCH_ANNOTATION],
+     * línea fina bajo el texto; la que se está visitando, [SEARCH_CURRENT_ANNOTATION], lleva
+     * además un tinte suave detrás) línea a línea, igual que el subrayado del usuario.
+     */
+    private fun drawSearchHighlights(canvas: Canvas, text: Spanned, layout: Layout) {
+        val spans = text.getSpans(0, text.length, Annotation::class.java)
+        for (span in spans) {
+            val isCurrent = span.value == SEARCH_CURRENT_ANNOTATION
+            if (!isCurrent && span.value != SEARCH_ANNOTATION) continue
+            val start = text.getSpanStart(span)
+            val end = text.getSpanEnd(span)
+            if (start < 0 || end <= start) continue
+
+            val firstLine = layout.getLineForOffset(start)
+            // end es exclusivo: con end - 1 evitamos una línea vacía extra si acaba justo al salto
+            val lastLine = layout.getLineForOffset(end - 1)
+            for (line in firstLine..lastLine) {
+                val from = max(start, layout.getLineStart(line))
+                // getLineVisibleEnd ignora los espacios/saltos finales de la línea
+                val to = min(end, layout.getLineVisibleEnd(line))
+                if (to <= from) continue
+
+                val x1 = layout.getPrimaryHorizontal(from)
+                val x2 = layout.getPrimaryHorizontal(to)
+                val left = min(x1, x2)
+                val right = max(x1, x2)
+
+                if (isCurrent) {
+                    canvas.drawRect(
+                        left,
+                        layout.getLineTopWithoutPadding(line).toFloat(),
+                        right,
+                        layout.getLineBottomWithoutPadding(line).toFloat(),
+                        searchTintPaint
+                    )
+                }
+                val underlineTop = layout.getLineBaseline(line) + searchLineOffset
+                canvas.drawRect(
+                    left,
+                    underlineTop,
+                    right,
+                    underlineTop + searchLineThickness,
+                    searchLinePaint
                 )
             }
         }

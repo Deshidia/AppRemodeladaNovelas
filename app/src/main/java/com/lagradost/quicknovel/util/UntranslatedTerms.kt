@@ -133,6 +133,55 @@ object UntranslatedTerms {
     private fun normalize(word: String): String =
         word.lowercase(Locale.ROOT).replace('’', '\'').removeSuffix("'s")
 
+    /** Frase máxima (aprox) del ejemplo que se muestra en el diálogo del término. */
+    private const val MAX_EXAMPLE_LEN = 220
+
+    /**
+     * Primera frase del texto que contiene el término, para dar contexto al elegir su
+     * traducción ("Ejemplo: ..."). Busca la primera aparición como palabra completa
+     * (sin importar mayúsculas) y recorta la frase para que no desborde el diálogo.
+     * @return la frase, o null si el término no aparece como palabra completa
+     */
+    fun exampleSentence(text: String, term: String): String? {
+        if (text.isBlank() || term.isBlank()) return null
+        val regex = try {
+            Regex("(?<!\\p{L})" + Regex.escape(term) + "(?!\\p{L})", RegexOption.IGNORE_CASE)
+        } catch (_: Throwable) {
+            return null
+        }
+        val at = regex.find(text)?.range?.first ?: return null
+
+        // frase: desde el final de la frase anterior hasta el final de esta
+        val enders = charArrayOf('.', '!', '?', '…')
+        var start = 0
+        for (i in at - 1 downTo 0) {
+            if (text[i] in enders) {
+                start = i + 1
+                break
+            }
+        }
+        var end = text.length
+        for (i in (at + term.length).coerceAtMost(text.length) until text.length) {
+            if (text[i] in enders) {
+                end = i + 1
+                break
+            }
+        }
+
+        var sentence = text.substring(start, end).replace('\n', ' ').trim()
+        if (sentence.length <= MAX_EXAMPLE_LEN) return sentence.ifEmpty { null }
+
+        // demasiado larga: recorta alrededor del término ajustando a límites de palabra
+        val relAt = (at - start).coerceIn(0, sentence.length)
+        var s = (relAt - 70).coerceAtLeast(0)
+        while (s > 0 && !sentence[s - 1].isWhitespace()) s--
+        var e = (s + MAX_EXAMPLE_LEN).coerceAtMost(sentence.length)
+        while (e < sentence.length && !sentence[e].isWhitespace()) e++
+        sentence = (if (s > 0) "…" else "") + sentence.substring(s, e).trim() +
+            (if (e < sentence.length) "…" else "")
+        return sentence.ifEmpty { null }
+    }
+
     /**
      * @param originalText texto del capítulo antes de traducir (inglés)
      * @param translatedText texto del capítulo tras traducir (español)

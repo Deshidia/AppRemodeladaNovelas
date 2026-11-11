@@ -21,6 +21,7 @@ import android.widget.TextView
 import androidx.core.text.getSpans
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewbinding.ViewBinding
 import com.lagradost.quicknovel.ChapterLoadSpanned
@@ -51,6 +52,8 @@ import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.showImage
 import com.lagradost.quicknovel.util.UIHelper.systemFonts
 import com.lagradost.quicknovel.util.toPx
+import com.lagradost.quicknovel.ui.roundedbg.SEARCH_ANNOTATION
+import com.lagradost.quicknovel.ui.roundedbg.SEARCH_CURRENT_ANNOTATION
 import com.lagradost.quicknovel.ui.roundedbg.USER_MARK_ANNOTATION
 import io.noties.markwon.image.AsyncDrawable
 import io.noties.markwon.image.AsyncDrawableSpan
@@ -128,6 +131,70 @@ data class TextVisualLine(
 
 fun TextVisualLine.toScroll(): ScrollIndex {
     return ScrollIndex(index = this.index, innerIndex = this.innerIndex, char = this.startChar)
+}
+
+/** Una coincidencia de la búsqueda del panel de términos, en coordenadas locales del
+ * párrafo [innerIndex] ([start, end) sobre el texto mostrado). */
+data class SearchHighlight(
+    val innerIndex: Int,
+    val start: Int,
+    val end: Int,
+)
+
+/**
+ * Pinta (sustituyendo cualquier otra) las coincidencias de búsqueda del panel en el
+ * TextView con [SEARCH_ANNOTATION] / [SEARCH_CURRENT_ANNOTATION], que son las que dibuja
+ * [com.lagradost.quicknovel.ui.roundedbg.RoundedBgTextView]. Lista vacía = solo limpia las
+ * que hubiera. Cada coincidencia mantiene su subrayado aunque el párrafo se re-vincule al
+ * hacer scroll, porque los rangos viven en el adapter.
+ */
+fun setSearchHighlightText(tv: TextView, ranges: List<IntRange>, current: IntRange?) {
+    try {
+        val spannable: Spannable = SpannableString(tv.text)
+        val length = spannable.length
+        var changed = false
+        for (s in spannable.getSpans<android.text.Annotation>(0, length)) {
+            if (s.value == SEARCH_ANNOTATION || s.value == SEARCH_CURRENT_ANNOTATION) {
+                spannable.removeSpan(s)
+                changed = true
+            }
+        }
+
+        for (r in ranges) {
+            val from = r.first.coerceIn(0, length)
+            val to = (r.last + 1).coerceIn(0, length)
+            if (to > from) {
+                spannable.setSpan(
+                    android.text.Annotation("", SEARCH_ANNOTATION),
+                    from,
+                    to,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                changed = true
+            }
+        }
+
+        if (current != null) {
+            val from = current.first.coerceIn(0, length)
+            val to = (current.last + 1).coerceIn(0, length)
+            if (to > from) {
+                spannable.setSpan(
+                    android.text.Annotation("", SEARCH_CURRENT_ANNOTATION),
+                    from,
+                    to,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                changed = true
+            }
+        }
+
+        // no re render an untouched textview
+        if (changed) {
+            tv.setText(spannable, TextView.BufferType.SPANNABLE)
+        }
+    } catch (t: Throwable) {
+        logError(t)
+    }
 }
 
 fun removeHighLightedText(tv: TextView) {
@@ -378,6 +445,67 @@ class TextAdapter(
         currentTTSLine = line
     }
 
+    // coincidencias de la búsqueda del panel de términos: párrafo (innerIndex) -> rangos locales
+    private var searchHighlights: Map<Int, List<IntRange>> = emptyMap()
+    private var searchCurrentInnerIndex = -1
+    private var searchCurrentRange: IntRange? = null
+
+    // se captura para saber qué párrafos están en pantalla al cambiar el subrayado
+    private var attachedRecyclerView: RecyclerView? = null
+
+    override fun onViewAttachedToWindow(holder: ViewHolderState<Any>) {
+        super.onViewAttachedToWindow(holder)
+        if (attachedRecyclerView == null) {
+            attachedRecyclerView = holder.itemView.parent as? RecyclerView
+        }
+    }
+
+    /**
+     * Sustituye las coincidencias subrayadas en el texto (la [current] se pinta además con
+     * tinte). Solo re-vincula los párrafos en pantalla: el estado vive aquí, así que los que
+     * entren después ya se subrayan al re-vincularse en el bind.
+     */
+    fun updateSearchHighlights(highlights: List<SearchHighlight>, current: SearchHighlight?) {
+        val oldKeys = buildSet {
+            addAll(searchHighlights.keys)
+            if (searchCurrentInnerIndex >= 0) add(searchCurrentInnerIndex)
+        }
+        searchHighlights = highlights.groupBy({ it.innerIndex }, { it.start until it.end })
+        searchCurrentInnerIndex = current?.innerIndex ?: -1
+        searchCurrentRange = current?.let { it.start until it.end }
+
+        val keys = buildSet {
+            addAll(oldKeys)
+            addAll(searchHighlights.keys)
+            if (searchCurrentInnerIndex >= 0) add(searchCurrentInnerIndex)
+        }
+        if (keys.isEmpty()) return
+
+        val layoutManager = attachedRecyclerView?.layoutManager as? LinearLayoutManager
+        val first = layoutManager?.findFirstVisibleItemPosition() ?: -1
+        val last = layoutManager?.findLastVisibleItemPosition() ?: -1
+        if (first >= 0 && last >= first) {
+            for (position in first..last) {
+                val item = getItemOrNull(position) ?: continue
+                if (item is TextSpan && item.innerIndex in keys) notifyItemChanged(position)
+            }
+        } else {
+            // sin recycler conocido (aún sin scroll): re-vincula todo, caso raro
+            for (position in 0 until itemCount) {
+                val item = getItem(position)
+                if (item is TextSpan && item.innerIndex in keys) notifyItemChanged(position)
+            }
+        }
+    }
+
+    /** Subraya en este bloque las coincidencias de búsqueda que le correspondan. */
+    private fun updateSearchHighlight(binding: ViewBinding, span: TextSpan) {
+        if (binding !is SingleTextBinding) return
+        val ranges = searchHighlights[span.innerIndex]
+        val current = if (span.innerIndex == searchCurrentInnerIndex) searchCurrentRange else null
+        setSearchHighlightText(binding.root, ranges.orEmpty(), current)
+    }
+
     /*fun getViewOffset(scrollVisibility: ScrollVisibilityItem, char: Int): Int? {
         try {
             if (scrollVisibility.adapterPosition < 0 || scrollVisibility.adapterPosition >= itemCount) return null
@@ -537,6 +665,7 @@ class TextAdapter(
         when (item) {
             is TextSpan -> {
                 this.bindText(binding, item, config)
+                this.updateSearchHighlight(binding, item)
                 this.updateUserMark(binding, item)
                 // because we bind text here we know that it will be cleared and thus
                 // we do not have to update it with null

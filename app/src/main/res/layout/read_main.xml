@@ -484,6 +484,7 @@
             android:id="@+id/untranslated_drawer"
             android:layout_width="300dp"
             android:layout_height="match_parent"
+            android:layout_gravity="end"
             android:background="?attr/primaryGrayBackground"
             android:clickable="true"
             android:elevation="16dp"
@@ -559,6 +560,67 @@
                 android:paddingBottom="12dp"
                 tools:listitem="@layout/item_untranslated_term" />
 
+            <!-- búsqueda para navegar por el capítulo (no guarda sustituciones) -->
+            <LinearLayout
+                android:id="@+id/untranslated_search_bar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/primaryBlackBackground"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="4dp">
+
+                <EditText
+                    android:id="@+id/untranslated_search_input"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/search_background"
+                    android:hint="@string/untranslated_search_hint"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:textColor="?attr/textColor"
+                    android:textColorHint="?attr/grayTextColor"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/untranslated_search_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:textColor="?attr/grayTextColor"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <ImageButton
+                    android:id="@+id/untranslated_search_prev"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/untranslated_search_prev"
+                    android:padding="9dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_baseline_arrow_upward_24"
+                    app:tint="?attr/textColor" />
+
+                <ImageButton
+                    android:id="@+id/untranslated_search_next"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/untranslated_search_next"
+                    android:padding="9dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_baseline_arrow_downward_24"
+                    app:tint="?attr/textColor" />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/untranslated_note"
                 android:layout_width="match_parent"
@@ -573,4 +635,60 @@
                 android:textSize="11sp" />
         </LinearLayout>
     </FrameLayout>
+
+    <!-- píldora flotante para seguir navegando entre coincidencias con el panel cerrado -->
+    <LinearLayout
+        android:id="@+id/untranslated_search_pill"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/search_background"
+        android:elevation="16dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/untranslated_search_pill_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingEnd="4dp"
+            android:textColor="?attr/textColor"
+            android:textSize="13sp" />
+
+        <ImageButton
+            android:id="@+id/untranslated_search_pill_prev"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/untranslated_search_prev"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_baseline_arrow_upward_24"
+            app:tint="?attr/textColor" />
+
+        <ImageButton
+            android:id="@+id/untranslated_search_pill_next"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/untranslated_search_next"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_baseline_arrow_downward_24"
+            app:tint="?attr/textColor" />
+
+        <ImageButton
+            android:id="@+id/untranslated_search_pill_close"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/untranslated_search_close"
+            android:padding="9dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/close_24px"
+            app:tint="?attr/textColor" />
+    </LinearLayout>
 </FrameLayout>

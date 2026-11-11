@@ -387,4 +387,11 @@
     <string name="untranslated_saved">Sustitución añadida: %1$s → %2$s</string>
     <string name="untranslated_need_translation">Escribe la traducción antes de aceptar</string>
     <string name="untranslated_note">Las sustituciones se guardan para este libro, así que también valen para los próximos capítulos. Puedes editarlas en Ajustes → Sustituir.</string>
+    <string name="untranslated_example">Ejemplo: %s</string>
+    <string name="untranslated_search_hint">Buscar en el capítulo</string>
+    <string name="untranslated_search_none">Sin coincidencias</string>
+    <string name="untranslated_search_progress">%1$d/%2$d</string>
+    <string name="untranslated_search_prev">Coincidencia anterior</string>
+    <string name="untranslated_search_next">Coincidencia siguiente</string>
+    <string name="untranslated_search_close">Cerrar búsqueda</string>
 </resources>

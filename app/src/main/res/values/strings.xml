@@ -467,4 +467,11 @@
     <string name="untranslated_saved">Replacement added: %1$s → %2$s</string>
     <string name="untranslated_need_translation">Enter the translation before accepting</string>
     <string name="untranslated_note">Replacements are saved for this book, so they also apply to the next chapters. You can edit them in Settings → Replace.</string>
+    <string name="untranslated_example">Example: %s</string>
+    <string name="untranslated_search_hint">Search in chapter</string>
+    <string name="untranslated_search_none">No matches</string>
+    <string name="untranslated_search_progress">%1$d/%2$d</string>
+    <string name="untranslated_search_prev">Previous match</string>
+    <string name="untranslated_search_next">Next match</string>
+    <string name="untranslated_search_close">Close search</string>
 </resources>

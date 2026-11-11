@@ -6,6 +6,7 @@ import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.ReleaseStatus
 import com.lagradost.quicknovel.SearchFilter
 import com.lagradost.quicknovel.SearchFilterOption
@@ -26,6 +27,9 @@ import com.lagradost.quicknovel.newChapterData
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.net.URI
@@ -57,6 +61,7 @@ import java.net.URLEncoder
 class NovelUpdatesProvider : MainAPI() {
     override val name = "NovelUpdates"
     override val mainUrl = "https://www.novelupdates.com"
+    override val iconId = R.drawable.icon_novelupdates
 
     override val usesCloudFlareKiller = true
     override val rateLimitTime: Long = 1000L
@@ -129,22 +134,29 @@ class NovelUpdatesProvider : MainAPI() {
         query: String,
         filters: Map<String, List<String>>
     ): List<SearchResponse> {
+        // La página 1 primero (es la que puede recurrir al WebView, lento); las demás se piden
+        // en paralelo y sin WebView: si una extra falla o viene vacía, no aporta nada.
         val results = LinkedHashMap<String, SearchResponse>()
-        for (page in 1..SEARCH_PAGES) {
-            val rows = try {
-                // Solo la primera página puede recurrir al WebView (lento); el resto es "extra"
-                parseSeriesRows(getDocument(finderUrl(query, filters, page), allowWebView = page == 1))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (page == 1) throw e // sin primera página no hay nada que enseñar
-                break
-            }
-            if (rows.isEmpty()) break
-            val before = results.size
-            rows.forEach { results.putIfAbsent(it.url, it) }
-            if (results.size == before) break // la web repitió la página
+        parseSeriesRows(getDocument(finderUrl(query, filters, 1))).forEach {
+            results.putIfAbsent(it.url, it)
         }
+
+        coroutineScope {
+            (2..SEARCH_PAGES).map { page ->
+                async {
+                    try {
+                        parseSeriesRows(
+                            getDocument(finderUrl(query, filters, page), allowWebView = false)
+                        )
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                }
+            }.awaitAll()
+        }.forEach { rows -> rows.forEach { results.putIfAbsent(it.url, it) } }
+
         return results.values.toList()
     }
 
@@ -743,11 +755,11 @@ class NovelUpdatesProvider : MainAPI() {
 
         /** Primera línea de la lista de capítulos que entrega el script */
         const val ROWS_HEADER = "#ROWS"
-        const val BROWSER_POLLS = 70 // consultas cada 600 ms (~42 s)
+        const val BROWSER_POLLS = 140 // consultas cada 300 ms (~42 s)
 
         /** WebView desacoplado (sin pantalla): sirve solo para páginas sin desafío */
         const val DETACHED_TIMEOUT_SECONDS = 15L
-        const val DETACHED_POLLS = 24
+        const val DETACHED_POLLS = 48 // consultas cada 300 ms (~14 s)
 
         /** Devuelve el HTML renderizado cuando la página ya es la real de NovelUpdates. */
         fun pageScript(maxPolls: Int) = """
@@ -759,7 +771,7 @@ class NovelUpdatesProvider : MainAPI() {
                         clearInterval(t);
                         NativeAndroid.onElementFound(document.documentElement.outerHTML);
                     } else if (n > $maxPolls) { clearInterval(t); }
-                }, 600);
+                }, 300);
             })();
         """.trimIndent()
 
@@ -780,7 +792,7 @@ class NovelUpdatesProvider : MainAPI() {
                         window.__nuStarted = true;
                         run();
                     } else if (n > $maxPolls) { clearInterval(t); }
-                }, 600);
+                }, 300);
 
                 function rowsFrom(doc) {
                     var out = [];
@@ -817,7 +829,7 @@ class NovelUpdatesProvider : MainAPI() {
                             var rows = rowsFrom(d);
                             if (rows.length > 0) return rows;
                         } catch (e) {}
-                        await new Promise(function(res) { setTimeout(res, 800); });
+                        await new Promise(function(res) { setTimeout(res, 400); });
                     }
                     return [];
                 }
@@ -851,7 +863,7 @@ class NovelUpdatesProvider : MainAPI() {
                                 while (next <= max) { var p = next++; results[p] = await loadPage(p); }
                             };
                             var workers = [];
-                            for (var k = 0; k < 4; k++) workers.push(worker());
+                            for (var k = 0; k < 6; k++) workers.push(worker());
                             await Promise.all(workers);
                             for (var q = 2; q <= max; q++) { if (results[q]) lines = lines.concat(results[q]); }
                             if (lines.length > 0) {
@@ -880,7 +892,7 @@ class NovelUpdatesProvider : MainAPI() {
                         clearInterval(t);
                         NativeAndroid.onElementFound(location.href);
                     } else if (n > $maxPolls) { clearInterval(t); }
-                }, 600);
+                }, 300);
             })();
         """.trimIndent()
 
