@@ -1,11 +1,22 @@
 package com.lagradost.quicknovel.providers
 
-import com.lagradost.quicknovel.*
-import com.lagradost.quicknovel.MainActivity.Companion.app
+import com.lagradost.quicknovel.ChapterData
+import com.lagradost.quicknovel.HeadMainPageResponse
+import com.lagradost.quicknovel.LoadResponse
+import com.lagradost.quicknovel.MainAPI
+import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.Score
+import com.lagradost.quicknovel.SearchResponse
+import com.lagradost.quicknovel.USER_AGENT
+import com.lagradost.quicknovel.fixUrl
+import com.lagradost.quicknovel.fixUrlNull
+import com.lagradost.quicknovel.newSearchResponse
+import com.lagradost.quicknovel.newStreamResponse
+import com.lagradost.quicknovel.setStatus
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
-class ReadLightNovelProvider : MainAPI() {
+object ReadLightNovelProvider : MainAPI() {
     override val name = "ReadLightNovel"
     override val mainUrl = "https://www.readlightnovel.me"
     override val iconId = R.drawable.big_icon_readlightnovel
@@ -75,7 +86,7 @@ class ReadLightNovelProvider : MainAPI() {
             val content = it.selectFirst("> div.top-novel-content")
             val nameHeader = it.selectFirst("div.top-novel-header > h2 > a")
             val cUrl = nameHeader?.attr("href") ?: return@mapNotNull null
-            val name = nameHeader.text() ?: return@mapNotNull null
+            val name = nameHeader.text()
             /* val tags = ArrayList(
                  content.select("> div.top-novel-body > div.novel-item > div.content")
                      .last().select("> ul > li > a").map { t -> t.text() })*/
@@ -196,7 +207,7 @@ class ReadLightNovelProvider : MainAPI() {
             setStatus(getIndex("Status").text())
             synopsis =
                 getIndex("Description").select("> p").joinToString(separator = "\n\n") { it.text() }
-            rating = (getIndex("Rating").text().toFloat() * 100).toInt()
+            score = Score.from10(getIndex("Rating").text())
             author = getIndex("Author(s)").selectFirst("> ul > li")?.text()
             if (author == "N/A") author = null
             tags = getIndex("Genre").select("ul > li > a").map { it.text() }

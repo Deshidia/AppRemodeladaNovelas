@@ -8,6 +8,7 @@ import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.Score
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.fixUrl
@@ -21,11 +22,14 @@ import org.jsoup.Jsoup
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
-open class NovelFireProvider : MainAPI() {
+object NovelFireProvider : NovelFireAPI()
+
+open class NovelFireAPI : MainAPI() {
     override val name = "NovelFire"
     override val mainUrl = "https://novelfire.net"
     override val iconId = R.drawable.icon_novelfire
     override val rateLimitTime = 500L
+    override val usesCloudFlareKiller = true
     override val hasMainPage = true
     override val hasReviews = true
     //novel phoenix uses novel instead of book
@@ -107,7 +111,6 @@ open class NovelFireProvider : MainAPI() {
         val url = "$mainUrl/genre-${tag}/${orderBy}/${mainCategory}/all-novel?page=$page"
         val document = app.get(url).document
 
-
         val returnValue = document.select("li.novel-item").mapNotNull { select ->
             val node = select.selectFirst("a[title]") ?: return@mapNotNull null
             val href = node.attr("href")
@@ -171,8 +174,7 @@ open class NovelFireProvider : MainAPI() {
                     ?.replace(Regex("[^0-9]"), "")
                     ?.trim()
                     ?.toIntOrNull() ?: 0
-            this.rating = document.selectFirst("div.rating strong.nub")?.text()
-                ?.toFloatOrNull()?.times(20)?.times(10)?.roundToInt()
+            score = Score.from5(document.selectFirst("div.rating strong.nub")?.text())
             related = getRelated(id)
             reviewData = id
         }
@@ -211,7 +213,7 @@ open class NovelFireProvider : MainAPI() {
         return response.data?.mapNotNull { item ->
             val nSort = item.nSort ?: return@mapNotNull null
 
-            val rawTitle = item.title ?: "Chapter $nSort"
+            val rawTitle = "Ch $nSort. ${item.title}"
             val chapterUrl = "$mainUrl/$sectionUrl/$bookSlug/chapter-$nSort"
             newChapterData(rawTitle, chapterUrl) {
                 this.dateOfRelease = item.createdAt

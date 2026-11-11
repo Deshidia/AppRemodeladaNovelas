@@ -6,6 +6,7 @@ import com.lagradost.quicknovel.HeadMainPageResponse
 import com.lagradost.quicknovel.LoadResponse
 import com.lagradost.quicknovel.MainAPI
 import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.Score
 import com.lagradost.quicknovel.SearchResponse
 import com.lagradost.quicknovel.USER_AGENT
 import com.lagradost.quicknovel.UserReview
@@ -14,22 +15,26 @@ import com.lagradost.quicknovel.newChapterData
 import com.lagradost.quicknovel.newReview
 import com.lagradost.quicknovel.newSearchResponse
 import com.lagradost.quicknovel.newStreamResponse
-import com.lagradost.quicknovel.providers.LibReadProvider.ChaptersResponse
-import com.lagradost.quicknovel.providers.LibReadProvider.LibReadCommentsResponse
+import com.lagradost.quicknovel.providers.LibReadAPI.ChaptersResponse
+import com.lagradost.quicknovel.providers.LibReadAPI.LibReadCommentsResponse
 import com.lagradost.quicknovel.setStatus
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
-open class FreewebnovelProvider : MainAPI() {
+object FreewebnovelProvider : FreewebnovelAPI()
+
+open class FreewebnovelAPI : MainAPI() {
     override val name = "FreeWebNovel"
     override val mainUrl = "https://freewebnovel.com"
     override val iconId = R.drawable.icon_freewebnovel
     override val iconBackgroundId = R.color.wuxiaWorldOnlineColor
+    override val rateLimitTime = 1100L
     open val secondUrl = mainUrl
     override val hasMainPage = true
     open val removeHtml = true // because the two sites use .html or not for no reason
     override val hasReviews = true
-    override val usesCloudFlareKiller = true
+
+    //override val usesCloudFlareKiller = true
     override val mainCategories = listOf(
         "All" to "",
         "Completed" to "completed"
@@ -79,6 +84,7 @@ open class FreewebnovelProvider : MainAPI() {
         "Latest Novels" to "latest-novel",
         "Most Popular" to "most-popular"
     )
+
     override suspend fun loadMainPage(
         page: Int,
         mainCategory: String?,
@@ -86,7 +92,7 @@ open class FreewebnovelProvider : MainAPI() {
         tag: String?
     ): HeadMainPageResponse {
         val url =
-            if (tag.isNullOrBlank()) "$mainUrl/sort/$orderBy/${if(mainCategory.isNullOrBlank()) "" else "$mainCategory/"}$page" else "$mainUrl/genre/$tag/${if (mainCategory.isNullOrBlank()) "" else "$mainCategory/"}$page"
+            if (tag.isNullOrBlank()) "$mainUrl/sort/$orderBy/${if (mainCategory.isNullOrBlank()) "" else "$mainCategory/"}$page" else "$mainUrl/genre/$tag/${if (mainCategory.isNullOrBlank()) "" else "$mainCategory/"}$page"
         val document = app.get(url).document
         val headers = document.select("div.ul-list1.ul-list1-2.ss-custom > div.li-row")
         val returnValue = headers.mapNotNull { h ->
@@ -113,7 +119,8 @@ open class FreewebnovelProvider : MainAPI() {
     open fun getAcode(url: String): String = url.substringAfterLast("/")
     suspend fun getChapterList(doc: Document, url: String): List<ChapterData> {
         val novelId = doc.selectFirst("a.set-case.add")?.attr("data-articleid")
-            ?: doc.selectFirst("meta[name=image]")?.attr("content")?.substringAfterLast("/")?.substringBefore("s.jpg")
+            ?: doc.selectFirst("meta[name=image]")?.attr("content")?.substringAfterLast("/")
+                ?.substringBefore("s.jpg")
             ?: return emptyList()
         val baseUrl = url.removeSuffix("/").removeSuffix(".html")
         val acode = getAcode(baseUrl)
@@ -141,7 +148,8 @@ open class FreewebnovelProvider : MainAPI() {
         return newStreamResponse(url = response.url, name = name, data = chaptersDataphp) {
             author = document.selectFirst("a[href^=/author/]")?.text()
                 ?: document.selectFirst("div.item:has(span.glyphicon-user) a")?.text()
-                ?: document.selectFirst("span[title=Author]")?.parent()?.selectFirst("a")?.text()
+                        ?: document.selectFirst("span[title=Author]")?.parent()?.selectFirst("a")
+                    ?.text()
             tags =
                 document.selectFirst("span.glyphicon.glyphicon-th-list")?.nextElementSiblings()
                     ?.get(0)
@@ -158,7 +166,7 @@ open class FreewebnovelProvider : MainAPI() {
             synopsis = document.selectFirst("div.inner")?.text()
             val votes = document.selectFirst("div.m-desc > div.score > p:nth-child(2)")
             if (votes != null) {
-                rating = votes.text().substringBefore('/').toFloat().times(200).toInt()
+                score = Score.from5(votes.text().substringBefore('/'))
                 peopleVoted = votes.text().substringAfter('(').filter { it.isDigit() }.toInt()
             }
             val statusHeader0 = document.selectFirst("span.s1.s2")
@@ -244,9 +252,10 @@ open class FreewebnovelProvider : MainAPI() {
                 ""
             )
     }
-     override suspend fun search(query: String): List<SearchResponse> {
+
+    override suspend fun search(query: String): List<SearchResponse> {
         val document = app.get(
-            "$mainUrl/search?keyword=${Uri.encode(query.trim()).replace("%20","+")}",
+            "$mainUrl/search?keyword=${Uri.encode(query.trim()).replace("%20", "+")}",
             headers = mapOf(
                 "referer" to mainUrl,
                 "x-requested-with" to "XMLHttpRequest",
