@@ -584,6 +584,70 @@
                         app:layout_constraintTop_toTopOf="parent"
                         app:tint="?attr/white" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <!-- Desplazamiento automático suave siguiendo la lectura del TTS -->
+                <com.google.android.material.checkbox.MaterialCheckBox
+                    android:id="@+id/read_settings_tts_smooth_scroll"
+                    style="@style/WhiteCheckmark"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/tts_smooth_scroll" />
+
+                <TextView
+                    android:id="@+id/read_settings_tts_scroll_speed_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textSize="16sp"
+                    tools:text="Velocidad del desplazamiento: 1.00x" />
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="15dp">
+
+                    <ImageView
+                        android:id="@+id/icon_scroll_slow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:src="@drawable/hiking_24px"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:tint="?attr/white" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/read_settings_tts_scroll_speed"
+                        style="@style/SettingsSliderTheme"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:stepSize="0.25"
+                        android:value="1.0"
+                        android:valueFrom="0.25"
+                        android:valueTo="3.0"
+                        app:layout_constraintEnd_toStartOf="@id/icon_scroll_fast"
+                        app:layout_constraintStart_toEndOf="@id/icon_scroll_slow"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <ImageView
+                        android:id="@+id/icon_scroll_fast"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:src="@drawable/directions_run_24px"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:tint="?attr/white" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <com.google.android.material.checkbox.MaterialCheckBox
+                    android:id="@+id/read_settings_tts_continuous_scroll"
+                    style="@style/WhiteCheckmark"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/tts_continuous_scroll" />
             </LinearLayout>
 
             <!-- Tab 3: Text -->

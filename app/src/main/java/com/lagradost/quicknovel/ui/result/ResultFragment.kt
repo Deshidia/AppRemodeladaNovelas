@@ -816,11 +816,11 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             }
             else -> visible
         }
-        binding.chapterCount.text = if (visible >= total) {
-            getString(R.string.read_action_chapters_formatted, total)
-        } else {
-            getString(R.string.chapters_count_filtered, visible, total)
-        }
+        // Formato oficial (ResultScreen.kt FilterHeader): «N Chapters» o «X/Y Chapters»
+        binding.chapterCount.text = getString(
+            R.string.read_action_chapters_formatted,
+            if (visible >= total) "$total" else "$visible/$total"
+        )
 
         val read = ResultViewModel.filterChapterByRead
         val unread = ResultViewModel.filterChapterByUnread
@@ -830,7 +830,11 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         // «todo activo» y «solo una categoría»; los chips reflejan ese estado.
         binding.chipAll.isChecked = read && unread
         binding.chipDownloaded.isChecked = downloaded && !read && !unread
-        binding.chipRead.isChecked = read && !unread && !downloaded
+        val readOnly = read && !unread && !downloaded
+        val unRead = unread && !read && !downloaded
+        binding.chipRead.isChecked = readOnly || unRead
+        // Como la oficial, el chip alterna su etiqueta «Has read»↔«Not read»
+        binding.chipRead.setText(if (unRead) R.string.not_read else R.string.has_read)
     }
 
     private fun applyChapterFilter(
@@ -1058,11 +1062,13 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
 
         // Chips de filtro rápido (Todo / Descargado / Has leído): un toque activa,
-        // otro toque vuelve a Todo, como el ciclo de la app oficial
+        // otro toque vuelve al estado anterior, como el ciclo de la app oficial
         binding.chipAll.setOnClickListener {
             applyChapterFilter(binding, read = true, unread = true, downloaded = true)
         }
         binding.chipDownloaded.setOnClickListener {
+            // La oficial alterna Descargado↔No descargado; el modelo del fork no
+            // tiene categoría «no descargado», así que se vuelve a Todo.
             val wasDownloadedOnly = ResultViewModel.filterChapterByDownloads &&
                 !ResultViewModel.filterChapterByRead && !ResultViewModel.filterChapterByUnread
             if (wasDownloadedOnly) {
@@ -1072,10 +1078,11 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             }
         }
         binding.chipRead.setOnClickListener {
+            // Como la oficial (Has read↔Not read); Todo lo restablece
             val wasReadOnly = ResultViewModel.filterChapterByRead &&
                 !ResultViewModel.filterChapterByUnread && !ResultViewModel.filterChapterByDownloads
             if (wasReadOnly) {
-                applyChapterFilter(binding, read = true, unread = true, downloaded = true)
+                applyChapterFilter(binding, read = false, unread = true, downloaded = false)
             } else {
                 applyChapterFilter(binding, read = true, unread = false, downloaded = false)
             }

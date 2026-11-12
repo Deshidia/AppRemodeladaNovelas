@@ -261,6 +261,9 @@
     <string name="start_chapter">Пропущенные главы</string>
     <string name="tts_speed">Темп TTS</string>
     <string name="tts_pitch">Тембр TTS</string>
+    <string name="tts_smooth_scroll">Плавная прокрутка вслед за голосом</string>
+    <string name="tts_scroll_speed_format">Скорость прокрутки: %1$.2fx</string>
+    <string name="tts_continuous_scroll">Постоянная прокрутка во время чтения вслух</string>
     <string name="show_logcat_key" translatable="false">show_logcat_key</string>
     <string name="close">Закрыть</string>
     <string name="clear">Очистить</string>

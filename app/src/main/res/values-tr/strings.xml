@@ -103,6 +103,9 @@
     <string name="scroll_with_volume_keys">Ses tuşlarıyla kaydır</string>
     <string name="general_settings">Genel</string>
     <string name="lock_tts">Metni seslendirme kaydırma alanını kilitle</string>
+    <string name="tts_smooth_scroll">Sesi takip eden yumuşak kaydırma</string>
+    <string name="tts_scroll_speed_format">Kaydırma hızı: %1$.2fx</string>
+    <string name="tts_continuous_scroll">Sesli okuma sırasında sürekli kaydırma</string>
     <string name="reading_color">Okuma Rengi</string>
     <string name="read_color">Okuyucu Teması</string>
     <string name="show_battery">Pil Göster</string>

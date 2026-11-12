@@ -13,7 +13,6 @@
 
     <string name="search_hint">Search Novels…</string>
     <string name="search_chapters">Search Chapters…</string>
-    <string name="chapters_count_filtered" formatted="true">%1$d of %2$d chapters</string>
     <string name="synopsis">Synopsis</string>
     <string name="no_data">No Data</string>
     <string name="no_author">Author not found</string>
@@ -90,7 +89,7 @@
     <string name="read_action_chapters">Chapters</string>
     <string name="read_action_prev_chapter">Previous Chapter</string>
     <string name="read_action_next_chapter">Next Chapter</string>
-    <string name="read_action_chapters_formatted" formatted="true">%d Chapters</string>
+    <string name="read_action_chapters_formatted" formatted="true">%s Chapters</string>
 
     <string name="read_action_tts">Text To Speech</string>
     <string name="read_action_screen_rotation">Screen Rotation</string>
@@ -308,6 +307,9 @@
     <string name="start_chapter">Skipped chapters</string>
     <string name="tts_speed">TTS Speed</string>
     <string name="tts_pitch">TTS Pitch</string>
+    <string name="tts_smooth_scroll">Smooth scrolling that follows the voice</string>
+    <string name="tts_scroll_speed_format">Scroll speed: %1$.2fx</string>
+    <string name="tts_continuous_scroll">Continuous scroll while reading aloud</string>
     <string name="show_logcat_key" translatable="false">show_logcat_key</string>
     <string name="close">Close</string>
     <string name="clear">Clear</string>

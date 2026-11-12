@@ -28,6 +28,12 @@ const val EPUB_SCROLL_VOL: String = "reader_epub_scroll_volume"
 const val EPUB_AUTHOR_NOTES: String = "reader_epub_author_notes"
 const val EPUB_TTS_LOCK: String = "reader_epub_scroll_lock"
 const val EPUB_TTS_SET_SPEED: String = "reader_epub_tts_speed"
+// Desplazamiento automático suave: la vista acompaña a la frase que lee el TTS con una animación
+const val EPUB_TTS_SMOOTH_SCROLL: String = "reader_epub_tts_smooth_scroll"
+// Scroll continuo tipo "modo cine" mientras el TTS está leyendo
+const val EPUB_TTS_CONTINUOUS_SCROLL: String = "reader_epub_tts_continuous_scroll"
+// Multiplicador de velocidad del desplazamiento automático del TTS
+const val EPUB_TTS_SCROLL_SPEED: String = "reader_epub_tts_scroll_speed"
 const val RESULT_CHAPTER_SORT: String = "result_chapter_sort"
 const val RESULT_CHAPTER_FILTER_DOWNLOADED: String = "result_chapter_filter_download"
 const val RESULT_CHAPTER_FILTER_BOOKMARKED: String = "result_chapter_filter_bookmarked"

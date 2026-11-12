@@ -8,57 +8,55 @@
         android:background="?attr/primaryGrayBackground"
         android:orientation="vertical">
 
-    <LinearLayout
+    <FrameLayout
             android:layout_height="48dp"
             android:layout_margin="10dp"
-            android:layout_width="match_parent"
-            android:orientation="horizontal">
+            android:background="@drawable/search_background"
+            android:layout_width="match_parent">
 
-        <FrameLayout
+        <androidx.appcompat.widget.SearchView
+                android:animateLayoutChanges="true"
+                android:id="@+id/download_search"
+                app:queryBackground="@color/transparent"
+                app:searchIcon="@drawable/search_icon"
+                app:searchHintIcon="@drawable/search_icon"
+                android:paddingStart="-10dp"
+                android:paddingEnd="92dp"
+                android:iconifiedByDefault="false"
+                app:queryHint="@string/search_downloads"
+                android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="4dp"
-                android:background="@drawable/search_background">
+                android:layout_gravity="center_vertical"
+                tools:ignore="RtlSymmetry" />
 
-            <androidx.appcompat.widget.SearchView
-                    android:animateLayoutChanges="true"
-                    android:id="@+id/download_search"
-                    app:queryBackground="@color/transparent"
-                    app:searchIcon="@drawable/search_icon"
-                    app:searchHintIcon="@drawable/search_icon"
-                    android:paddingStart="-10dp"
-                    android:iconifiedByDefault="false"
-                    app:queryHint="@string/search_downloads"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:layout_gravity="center_vertical"
-                    tools:ignore="RtlSymmetry" />
-
-        </FrameLayout>
-
-        <!-- Menú de importar + alternar rejilla/lista, como en la app oficial.
+        <!-- Botones dentro de la barra (trailing icons), como en la app oficial
+             (DownloadScreen.kt trailingIcon): menú «+» e interruptor rejilla/lista.
              El botón de continuar de las portadas (resumeReading) no se toca. -->
-        <ImageButton
-                android:id="@+id/download_import_btn"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_gravity="center_vertical"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/import_epub"
-                android:src="@drawable/ic_baseline_add_24"
-                app:tint="?attr/iconColor" />
+        <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|center_vertical"
+                android:orientation="horizontal">
 
-        <ImageButton
-                android:id="@+id/download_layout_toggle"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_gravity="center_vertical"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/grid_view"
-                android:src="@drawable/ic_baseline_grid_view_24"
-                app:tint="?attr/iconColor" />
-    </LinearLayout>
+            <ImageButton
+                    android:id="@+id/download_import_btn"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/import_epub"
+                    android:src="@drawable/ic_baseline_add_24"
+                    app:tint="?attr/iconColor" />
+
+            <ImageButton
+                    android:id="@+id/download_layout_toggle"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/grid_view"
+                    android:src="@drawable/ic_baseline_grid_view_24"
+                    app:tint="?attr/iconColor" />
+        </LinearLayout>
+    </FrameLayout>
 
     <!--<com.google.android.material.appbar.AppBarLayout
             android:background="@android:color/transparent"
