@@ -1,9 +1,12 @@
 package com.lagradost.quicknovel.ui.result
 
+import android.graphics.Color
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.view.isGone
 import com.lagradost.quicknovel.ChapterData
+import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.databinding.SimpleChapterBinding
 import com.lagradost.quicknovel.ui.BaseDiffCallback
 import com.lagradost.quicknovel.ui.NoStateAdapter
@@ -39,10 +42,21 @@ class ChapterAdapter(val viewModel: ResultViewModel) :
         card: ChapterData,
         viewModel: ResultViewModel
     ) {
-        val alpha = if (viewModel.hasReadChapter(chapter = card)) 0.5F else 1.0F
+        // Icono de leído a la izquierda, como el ChapterItem oficial
+        // (ResultScreen.kt: AnimatedVisibility(response.chaptersRead[...]))
+        binding.chapterReadCheck.isGone = !viewModel.hasReadChapter(chapter = card)
 
-        binding.name.alpha = alpha
-        binding.releaseDate.alpha = alpha
+        // Resalte de selección, como la oficial:
+        // onBackground.copy(alpha = 0.2f) — aquí ?attr/textColor con alpha 0.2
+        binding.root.setBackgroundColor(
+            if (viewModel.isChapterSelected(card)) {
+                val tv = TypedValue()
+                binding.root.context.theme.resolveAttribute(R.attr.textColor, tv, true)
+                Color.argb(51, Color.red(tv.data), Color.green(tv.data), Color.blue(tv.data))
+            } else {
+                Color.TRANSPARENT
+            }
+        )
     }
 
     override fun onBindContent(holder: ViewHolderState<Any>, item: ChapterData, position: Int) {
@@ -52,12 +66,18 @@ class ChapterAdapter(val viewModel: ResultViewModel) :
             releaseDate.text = item.dateOfRelease
             releaseDate.isGone = item.dateOfRelease.isNullOrBlank()
             root.setOnClickListener {
-                viewModel.streamRead(item)
-                viewModel.isResume = true//to update read status
+                // Con selección activa, el toque alterna la selección (oficial:
+                // onClick = if (isSelectingChapters) toggleClick else Stream)
+                if (viewModel.isSelectingChapters) {
+                    viewModel.toggleChapterSelection(item)
+                } else {
+                    viewModel.streamRead(item)
+                    viewModel.isResume = true//to update read status
+                }
             }
+            // Pulsación larga = entrar en modo selección (oficial: onLongClick = toggleClick)
             root.setOnLongClickListener {
-                viewModel.setReadChapter(chapter = item, !viewModel.hasReadChapter(item))
-                refresh(binding, item, viewModel)
+                viewModel.toggleChapterSelection(item)
                 return@setOnLongClickListener true
             }
             refresh(binding, item, viewModel)

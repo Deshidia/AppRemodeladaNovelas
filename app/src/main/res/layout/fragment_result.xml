@@ -711,6 +711,90 @@ Translator: Rainbow Turtle" />
                                 android:paddingTop="5dp"
                                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
                                 app:spanCount="1" />
+
+                            <!-- Barra de acciones sobre los capítulos seleccionados
+                                 (pulsación larga), como el BottomBar oficial
+                                 (ResultScreen.kt:229-369): cerrar, extender selección,
+                                 marcar leído/no leído y descargar. -->
+                            <LinearLayout
+                                android:id="@+id/chapter_selection_bar"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="?attr/primaryBlackBackground"
+                                android:orientation="vertical"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="8dp"
+                                android:visibility="gone"
+                                tools:visibility="gone">
+
+                                <TextView
+                                    android:id="@+id/chapter_selection_count"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:textColor="?attr/textColor"
+                                    android:textSize="18sp"
+                                    android:textStyle="bold"
+                                    tools:text="Selected 3" />
+
+                                <LinearLayout
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:gravity="center_vertical"
+                                    android:orientation="horizontal">
+
+                                    <ImageButton
+                                        android:id="@+id/chapter_selection_close"
+                                        android:layout_width="44dp"
+                                        android:layout_height="44dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:contentDescription="@string/close"
+                                        android:src="@drawable/close_24px"
+                                        app:tint="?attr/iconColor" />
+
+                                    <ImageButton
+                                        android:id="@+id/chapter_selection_up"
+                                        android:layout_width="44dp"
+                                        android:layout_height="44dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:src="@drawable/move_selection_up"
+                                        app:tint="?attr/iconColor" />
+
+                                    <ImageButton
+                                        android:id="@+id/chapter_selection_down"
+                                        android:layout_width="44dp"
+                                        android:layout_height="44dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:src="@drawable/move_selection_down"
+                                        app:tint="?attr/iconColor" />
+
+                                    <ImageButton
+                                        android:id="@+id/chapter_selection_read"
+                                        android:layout_width="44dp"
+                                        android:layout_height="44dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:contentDescription="@string/has_read"
+                                        android:src="@drawable/done_all"
+                                        app:tint="?attr/iconColor" />
+
+                                    <ImageButton
+                                        android:id="@+id/chapter_selection_unread"
+                                        android:layout_width="44dp"
+                                        android:layout_height="44dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:contentDescription="@string/not_read"
+                                        android:src="@drawable/remove_done"
+                                        app:tint="?attr/iconColor" />
+
+                                    <ImageButton
+                                        android:id="@+id/chapter_selection_download"
+                                        android:layout_width="44dp"
+                                        android:layout_height="44dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:contentDescription="@string/download"
+                                        android:src="@drawable/arrow_circle_down_24px"
+                                        app:tint="?attr/iconColor" />
+                                </LinearLayout>
+                            </LinearLayout>
                         </LinearLayout>
 
                         <LinearLayout

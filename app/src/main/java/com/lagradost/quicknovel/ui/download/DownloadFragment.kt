@@ -6,7 +6,6 @@ import android.widget.ImageView
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.viewModels
-import androidx.preference.PreferenceManager
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
@@ -34,9 +33,7 @@ import com.lagradost.quicknovel.TTSGlobalState
 import com.lagradost.quicknovel.ui.BaseFragment
 import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.UiImage
-import com.lagradost.quicknovel.ui.clear
 import com.lagradost.quicknovel.ui.img
-import com.lagradost.quicknovel.util.SettingsHelper.getDownloadIsCompact
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.ui.TTSMiniPlayerBinder
 import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
@@ -140,17 +137,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
     private var tabLayoutMediator: TabLayoutMediator? = null
     private var pagerAdapter: ViewpagerAdapter? = null
 
-    // Como en la app oficial: el icono muestra la vista a la que cambiarías al pulsar
-    private fun updateLayoutToggleIcon(binding: FragmentDownloadsBinding) {
-        val context = binding.root.context
-        val isGrid = !context.getDownloadIsCompact()
-        binding.downloadLayoutToggle.setImageResource(
-            if (isGrid) R.drawable.ic_baseline_list_24 else R.drawable.ic_baseline_grid_view_24
-        )
-        binding.downloadLayoutToggle.contentDescription =
-            context.getString(if (isGrid) R.string.list_view else R.string.grid_view)
-    }
-
     override fun onResume() {
         super.onResume()
         // Picks up any list added/renamed/removed/reordered in Settings while
@@ -213,24 +199,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
             }
             popup.show()
         }
-
-        // Alternar rejilla/lista sin salir de la biblioteca (misma preferencia que ya usa la app)
-        binding.downloadLayoutToggle.setOnClickListener { view ->
-            val context = view.context
-            val isGrid = !context.getDownloadIsCompact()
-            PreferenceManager.getDefaultSharedPreferences(context)
-                .edit()
-                .putString(context.getString(R.string.download_format_key), if (isGrid) "list" else "grid")
-                .apply()
-            updateLayoutToggleIcon(binding)
-            // Reconstruir las páginas con el nuevo formato, conservando la pestaña actual
-            val current = binding.viewpager.currentItem
-            AnyAdapter.sharedPool.clear()
-            binding.viewpager.adapter = null
-            binding.viewpager.adapter = pagerAdapter
-            binding.viewpager.setCurrentItem(current, false)
-        }
-        updateLayoutToggleIcon(binding)
 
 
         val adapter = ViewpagerAdapter(viewModel, this) { isScrollingDown ->

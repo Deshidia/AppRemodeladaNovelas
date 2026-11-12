@@ -12,6 +12,7 @@ import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.widget.SearchView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.view.doOnNextLayout
@@ -850,6 +851,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         updateChapterChips(binding)
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     override fun onBindingCreated(binding: FragmentResultBinding, savedInstanceState: Bundle?) {
         val url = savedInstanceState?.getString("url") ?: arguments?.getString("url")
         ?: throw NotImplementedError()
@@ -1105,6 +1107,72 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 return true
             }
         })
+
+        // Selección de capítulos (pulsación larga) + barra de acciones, como el
+        // BottomBar oficial (ResultScreen.kt:229-369): cerrar, extender la selección
+        // arriba/abajo (solo con 1 capítulo), marcar leído/no leído y descargar.
+        val selectionCallback = object : OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() {
+                viewModel.clearChapterSelection()
+            }
+        }
+        activity?.onBackPressedDispatcher?.addCallback(viewLifecycleOwner, selectionCallback)
+
+        observe(viewModel.chapterSelection) { selected ->
+            val sel = selected ?: emptySet()
+            (binding.chapterList.adapter as? ChapterAdapter)?.notifyDataSetChanged()
+            val chapters = viewModel.chapters.value.orEmpty()
+            val selectedChapters = chapters.filter { it.url in sel }
+            binding.chapterSelectionBar.isVisible = selectedChapters.isNotEmpty()
+            selectionCallback.isEnabled = selectedChapters.isNotEmpty()
+            if (selectedChapters.isEmpty()) return@observe
+            binding.chapterSelectionCount.text =
+                getString(R.string.selected_format, selectedChapters.size)
+            val readCount = selectedChapters.count { viewModel.hasReadChapter(it) }
+            binding.chapterSelectionRead.isVisible = readCount > 0
+            binding.chapterSelectionUnread.isVisible = readCount < selectedChapters.size
+            val pos =
+                if (selectedChapters.size == 1) chapters.indexOfFirst { it.url == selectedChapters.first().url } else -1
+            binding.chapterSelectionUp.isVisible = pos > 0
+            binding.chapterSelectionDown.isVisible = pos in 0 until chapters.lastIndex
+            binding.chapterSelectionDownload.isVisible =
+                viewModel.firstSelectedFullIndex() != null
+        }
+
+        binding.chapterSelectionClose.setOnClickListener {
+            viewModel.clearChapterSelection()
+        }
+        binding.chapterSelectionUp.setOnClickListener {
+            // oficial: BitSet().apply { set(0, index + 1) } — selecciona hasta aquí
+            val chapters = viewModel.chapters.value.orEmpty()
+            val sel = viewModel.chapterSelection.value.orEmpty()
+            val pos = chapters.indexOfFirst { it.url in sel }
+            if (pos > 0) {
+                viewModel.selectChapters(chapters.subList(0, pos + 1).map { it.url }.toSet())
+            }
+        }
+        binding.chapterSelectionDown.setOnClickListener {
+            // oficial: BitSet().apply { set(index, size) } — selecciona desde aquí al final
+            val chapters = viewModel.chapters.value.orEmpty()
+            val sel = viewModel.chapterSelection.value.orEmpty()
+            val pos = chapters.indexOfFirst { it.url in sel }
+            if (pos >= 0) {
+                viewModel.selectChapters(chapters.subList(pos, chapters.size).map { it.url }.toSet())
+            }
+        }
+        binding.chapterSelectionRead.setOnClickListener {
+            viewModel.markSelectionRead(true)
+        }
+        binding.chapterSelectionUnread.setOnClickListener {
+            viewModel.markSelectionRead(false)
+        }
+        binding.chapterSelectionDownload.setOnClickListener {
+            // El descargador del fork trabaja por rangos (no conjuntos arbitrarios
+            // como el de la oficial): descarga desde el primer capítulo seleccionado
+            // hasta el final — el «download_from_chapter» que el fork ya tiene.
+            viewModel.firstSelectedFullIndex()?.let { viewModel.downloadFrom(it) }
+            viewModel.clearChapterSelection()
+        }
 
         binding.chaptersFab.setOnClickListener { _ ->
             val act = activity ?: return@setOnClickListener

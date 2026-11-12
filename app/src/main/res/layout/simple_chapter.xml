@@ -1,42 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns:tools="http://schemas.android.com/tools"
+<!-- Ítem de capítulo como en la app oficial (ResultScreen.kt ChapterItem):
+     fila plana con icono de leído a la izquierda, nombre (máx. 2 líneas) y
+     fecha debajo; la selección se resalta desde ChapterAdapter. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto"
-        android:backgroundTint="?attr/primaryBlackBackground"
-        android:layout_marginBottom="5dp"
+        xmlns:tools="http://schemas.android.com/tools"
         android:layout_width="match_parent"
-        app:cardCornerRadius="0dp"
-        android:foreground="?android:attr/selectableItemBackgroundBorderless"
-        android:layout_height="50dp">
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:background="@android:color/transparent"
+        android:foreground="?android:attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="8dp">
+
+    <ImageView
+            android:id="@+id/chapter_read_check"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@string/has_read"
+            android:src="@drawable/check_24px"
+            app:tint="?attr/iconColor"
+            android:visibility="gone"
+            tools:ignore="ContentDescription" />
 
     <LinearLayout
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:padding="5dp"
-            android:orientation="vertical"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
 
         <TextView
-                android:ellipsize="marquee"
-                android:singleLine="true"
-                tools:textSize="16sp"
-                tools:textColor="?attr/textColor"
-                android:layout_gravity="center"
-                tools:text="Chapter 1"
                 android:id="@+id/name"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="?attr/textColor"
+                android:textSize="14sp"
+                tools:text="Chapter 1" />
 
         <TextView
-                tools:textSize="14sp"
-                tools:textColor="?attr/grayTextColor"
-                android:layout_gravity="center"
-                tools:text="Released 10h ago"
                 android:id="@+id/release_date"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-        </TextView>
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?attr/grayTextColor"
+                android:textSize="12sp"
+                tools:text="Released 10h ago" />
     </LinearLayout>
-</androidx.cardview.widget.CardView>
+</LinearLayout>

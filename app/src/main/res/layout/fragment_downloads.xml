@@ -21,7 +21,7 @@
                 app:searchIcon="@drawable/search_icon"
                 app:searchHintIcon="@drawable/search_icon"
                 android:paddingStart="-10dp"
-                android:paddingEnd="92dp"
+                android:paddingEnd="44dp"
                 android:iconifiedByDefault="false"
                 app:queryHint="@string/search_downloads"
                 android:layout_width="match_parent"
@@ -29,33 +29,19 @@
                 android:layout_gravity="center_vertical"
                 tools:ignore="RtlSymmetry" />
 
-        <!-- Botones dentro de la barra (trailing icons), como en la app oficial
-             (DownloadScreen.kt trailingIcon): menú «+» e interruptor rejilla/lista.
-             El botón de continuar de las portadas (resumeReading) no se toca. -->
-        <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+        <!-- Botón «+» dentro de la barra (trailing icon), como en la app oficial
+             (DownloadScreen.kt trailingIcon): menú con importar libro y actualizar.
+             Sin interruptor rejilla/lista: no se pidió. El SearchView conserva su
+             comportamiento original del fork (filtrado en vivo, botón de borrar). -->
+        <ImageButton
+                android:id="@+id/download_import_btn"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:layout_gravity="end|center_vertical"
-                android:orientation="horizontal">
-
-            <ImageButton
-                    android:id="@+id/download_import_btn"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/import_epub"
-                    android:src="@drawable/ic_baseline_add_24"
-                    app:tint="?attr/iconColor" />
-
-            <ImageButton
-                    android:id="@+id/download_layout_toggle"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/grid_view"
-                    android:src="@drawable/ic_baseline_grid_view_24"
-                    app:tint="?attr/iconColor" />
-        </LinearLayout>
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/import_epub"
+                android:src="@drawable/ic_baseline_add_24"
+                app:tint="?attr/iconColor" />
     </FrameLayout>
 
     <!--<com.google.android.material.appbar.AppBarLayout

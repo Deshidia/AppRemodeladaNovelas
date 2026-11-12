@@ -240,6 +240,52 @@ class ResultViewModel : ViewModel() {
     val chapters: MutableLiveData<List<ChapterData>?> =
         MutableLiveData<List<ChapterData>?>()
 
+    /** Selección de capítulos (pulsación larga), como en la oficial:
+     *  ResultScreen.kt usa un BitSet; aquí un set de urls, estable ante reordenados. */
+    val chapterSelection: MutableLiveData<Set<String>> =
+        MutableLiveData<Set<String>>(emptySet())
+
+    val isSelectingChapters: Boolean
+        get() = chapterSelection.value?.isNotEmpty() == true
+
+    fun isChapterSelected(chapter: ChapterData): Boolean =
+        chapterSelection.value?.contains(chapter.url) == true
+
+    fun toggleChapterSelection(chapter: ChapterData) {
+        val cur = chapterSelection.value?.toMutableSet() ?: mutableSetOf()
+        if (!cur.add(chapter.url)) {
+            cur.remove(chapter.url)
+        }
+        chapterSelection.postValue(cur)
+    }
+
+    fun selectChapters(urls: Set<String>) {
+        chapterSelection.postValue(urls)
+    }
+
+    fun clearChapterSelection() {
+        if (isSelectingChapters) {
+            chapterSelection.postValue(emptySet())
+        }
+    }
+
+    /** Marca leídos/no leídos todos los capítulos seleccionados (oficial: MarkSelection). */
+    fun markSelectionRead(read: Boolean) {
+        val sel = chapterSelection.value ?: return
+        val list = chapters.value ?: return
+        list.filter { it.url in sel }.forEach { setReadChapter(it, read) }
+        chapterSelection.postValue(sel) // repinta los checks
+    }
+
+    /** Primer capítulo seleccionado en el orden COMPLETO de la novela; null si no
+     *  aplica (EPUB) o nada seleccionado. Sirve para downloadFrom(start). */
+    fun firstSelectedFullIndex(): Int? {
+        val sel = chapterSelection.value ?: return null
+        if (sel.isEmpty()) return null
+        val stream = (load as? StreamResponse) ?: return null
+        return stream.data.indexOfFirst { it.url in sel }.takeIf { it >= 0 }
+    }
+
     /** Se incrementa cuando termina de traducirse en segundo plano el nombre de los capítulos. */
     val chapterNamesChanged: MutableLiveData<Int> = MutableLiveData<Int>(0)
 
