@@ -1,0 +1,362 @@
+Patch: Mejoras de interfaz v11 (biblioteca como la oficial + filtros de ficha + barra de capítulos) para el fork
+Deshidia/AppRemodeladaNovelas — se aplica ENCIMA de la v10 (estado 7f6ff25 del usuario).
+No toca funciones propias del fork (resumeReading, panel de filtros, DeepL/Gemini, Sustituir...).
+Aplica con: git apply patch_ui_biblioteca_ficha_v11.patch  — o ejecuta instalar_mejoras_ui_v11.sh
+
+diff --git a/app/src/main/java/com/lagradost/quicknovel/ui/download/DownloadFragment.kt b/app/src/main/java/com/lagradost/quicknovel/ui/download/DownloadFragment.kt
+index c03ffe3..853161a 100644
+--- a/app/src/main/java/com/lagradost/quicknovel/ui/download/DownloadFragment.kt
++++ b/app/src/main/java/com/lagradost/quicknovel/ui/download/DownloadFragment.kt
+@@ -3,8 +3,10 @@ package com.lagradost.quicknovel.ui.download
+ import android.annotation.SuppressLint
+ import android.view.View
+ import android.widget.ImageView
++import androidx.appcompat.widget.PopupMenu
+ import androidx.appcompat.widget.SearchView
+ import androidx.fragment.app.viewModels
++import androidx.preference.PreferenceManager
+ import androidx.lifecycle.lifecycleScope
+ import androidx.recyclerview.widget.RecyclerView
+ import androidx.viewpager2.widget.ViewPager2
+@@ -23,6 +25,7 @@ import com.lagradost.quicknovel.DOWNLOAD_NORMAL_SORTING_METHOD
+ import com.lagradost.quicknovel.DOWNLOAD_SETTINGS
+ import com.lagradost.quicknovel.DOWNLOAD_SORTING_METHOD
+ import com.lagradost.quicknovel.DownloadState
++import com.lagradost.quicknovel.MainActivity
+ import com.lagradost.quicknovel.R
+ import com.lagradost.quicknovel.databinding.FragmentDownloadsBinding
+ import com.lagradost.quicknovel.databinding.SortBottomSheetBinding
+@@ -32,6 +35,7 @@ import com.lagradost.quicknovel.ui.BaseFragment
+ import com.lagradost.quicknovel.ui.SortingMethodAdapter
+ import com.lagradost.quicknovel.ui.UiImage
+ import com.lagradost.quicknovel.ui.img
++import com.lagradost.quicknovel.util.SettingsHelper.getDownloadIsCompact
+ import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
+ import com.lagradost.quicknovel.ui.TTSMiniPlayerBinder
+ import com.lagradost.quicknovel.util.UIHelper.fixPaddingStatusbar
+@@ -133,6 +137,18 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
+     lateinit var searchExitIcon: ImageView
+     lateinit var searchMagIcon: ImageView
+     private var tabLayoutMediator: TabLayoutMediator? = null
++    private var pagerAdapter: ViewpagerAdapter? = null
++
++    // Como en la app oficial: el icono muestra la vista a la que cambiarías al pulsar
++    private fun updateLayoutToggleIcon(binding: FragmentDownloadsBinding) {
++        val context = binding.root.context
++        val isGrid = !context.getDownloadIsCompact()
++        binding.downloadLayoutToggle.setImageResource(
++            if (isGrid) R.drawable.ic_baseline_list_24 else R.drawable.ic_baseline_grid_view_24
++        )
++        binding.downloadLayoutToggle.contentDescription =
++            context.getString(if (isGrid) R.string.list_view else R.string.grid_view)
++    }
+ 
+     override fun onResume() {
+         super.onResume()
+@@ -170,8 +186,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
+         searchExitIcon =
+             binding.downloadSearch.findViewById(androidx.appcompat.R.id.search_close_btn)
+         searchMagIcon = binding.downloadSearch.findViewById(androidx.appcompat.R.id.search_mag_icon)
+-        searchMagIcon.scaleX = 0.65f
+-        searchMagIcon.scaleY = 0.65f
+ 
+         binding.downloadSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+             override fun onQueryTextSubmit(query: String): Boolean {
+@@ -185,6 +199,38 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
+             }
+         })
+ 
++        // Menú "+" como en la app oficial: importar libro y actualizar
++        binding.downloadImportBtn.setOnClickListener { view ->
++            val popup = PopupMenu(view.context, view)
++            popup.menu.add(getString(R.string.import_epub)).setOnMenuItemClickListener {
++                MainActivity.importEpub()
++                true
++            }
++            popup.menu.add(getString(R.string.refresh)).setOnMenuItemClickListener {
++                viewModel.refresh()
++                true
++            }
++            popup.show()
++        }
++
++        // Alternar rejilla/lista sin salir de la biblioteca (misma preferencia que ya usa la app)
++        binding.downloadLayoutToggle.setOnClickListener { view ->
++            val context = view.context
++            val isGrid = !context.getDownloadIsCompact()
++            PreferenceManager.getDefaultSharedPreferences(context)
++                .edit()
++                .putString(context.getString(R.string.download_format_key), if (isGrid) "list" else "grid")
++                .apply()
++            updateLayoutToggleIcon(binding)
++            // Reconstruir las páginas con el nuevo formato, conservando la pestaña actual
++            val current = binding.viewpager.currentItem
++            AnyAdapter.sharedPool.clear()
++            binding.viewpager.adapter = null
++            binding.viewpager.adapter = pagerAdapter
++            binding.viewpager.setCurrentItem(current, false)
++        }
++        updateLayoutToggleIcon(binding)
++
+ 
+         val adapter = ViewpagerAdapter(viewModel, this) { isScrollingDown ->
+             if (isScrollingDown)
+@@ -192,6 +238,7 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
+             else
+                 binding.downloadFab.extend()
+         }
++        pagerAdapter = adapter
+ 
+         observe(viewModel.pages) { pages ->
+             adapter.submitList(pages)
+diff --git a/app/src/main/java/com/lagradost/quicknovel/ui/result/ResultFragment.kt b/app/src/main/java/com/lagradost/quicknovel/ui/result/ResultFragment.kt
+index 2e0b00e..653f4c5 100644
+--- a/app/src/main/java/com/lagradost/quicknovel/ui/result/ResultFragment.kt
++++ b/app/src/main/java/com/lagradost/quicknovel/ui/result/ResultFragment.kt
+@@ -804,6 +804,48 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
+         return items
+     }
+ 
++    // Filtros rápidos de capítulos (chips como en la app oficial). Usan las MISMAS
++    // preferencias que el panel de filtros del fork (chaptersFab), así que ambos
++    // quedan siempre sincronizados y no se duplica ningún dato.
++    private fun updateChapterChips(binding: FragmentResultBinding) {
++        val visible = viewModel.chapters.value?.size ?: 0
++        val total = when (val res = viewModel.loadResponse.value) {
++            is Resource.Success -> when (val response = res.value) {
++                is StreamResponse -> response.data.size
++                else -> visible
++            }
++            else -> visible
++        }
++        binding.chapterCount.text = if (visible >= total) {
++            getString(R.string.read_action_chapters_formatted, total)
++        } else {
++            getString(R.string.chapters_count_filtered, visible, total)
++        }
++
++        val read = ResultViewModel.filterChapterByRead
++        val unread = ResultViewModel.filterChapterByUnread
++        val downloaded = ResultViewModel.filterChapterByDownloads
++
++        // En el modelo del fork (categorías combinables con «o») los estados puros son
++        // «todo activo» y «solo una categoría»; los chips reflejan ese estado.
++        binding.chipAll.isChecked = read && unread
++        binding.chipDownloaded.isChecked = downloaded && !read && !unread
++        binding.chipRead.isChecked = read && !unread && !downloaded
++    }
++
++    private fun applyChapterFilter(
++        binding: FragmentResultBinding,
++        read: Boolean,
++        unread: Boolean,
++        downloaded: Boolean
++    ) {
++        ResultViewModel.filterChapterByRead = read
++        ResultViewModel.filterChapterByUnread = unread
++        ResultViewModel.filterChapterByDownloads = downloaded
++        viewModel.reorderChapters()
++        updateChapterChips(binding)
++    }
++
+     override fun onBindingCreated(binding: FragmentResultBinding, savedInstanceState: Bundle?) {
+         val url = savedInstanceState?.getString("url") ?: arguments?.getString("url")
+         ?: throw NotImplementedError()
+@@ -1012,6 +1054,31 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
+                     adapter.submitList(chapters)
+                 }
+             }
++            updateChapterChips(binding)
++        }
++
++        // Chips de filtro rápido (Todo / Descargado / Has leído): un toque activa,
++        // otro toque vuelve a Todo, como el ciclo de la app oficial
++        binding.chipAll.setOnClickListener {
++            applyChapterFilter(binding, read = true, unread = true, downloaded = true)
++        }
++        binding.chipDownloaded.setOnClickListener {
++            val wasDownloadedOnly = ResultViewModel.filterChapterByDownloads &&
++                !ResultViewModel.filterChapterByRead && !ResultViewModel.filterChapterByUnread
++            if (wasDownloadedOnly) {
++                applyChapterFilter(binding, read = true, unread = true, downloaded = true)
++            } else {
++                applyChapterFilter(binding, read = false, unread = false, downloaded = true)
++            }
++        }
++        binding.chipRead.setOnClickListener {
++            val wasReadOnly = ResultViewModel.filterChapterByRead &&
++                !ResultViewModel.filterChapterByUnread && !ResultViewModel.filterChapterByDownloads
++            if (wasReadOnly) {
++                applyChapterFilter(binding, read = true, unread = true, downloaded = true)
++            } else {
++                applyChapterFilter(binding, read = true, unread = false, downloaded = false)
++            }
+         }
+ 
+         observe(viewModel.chapterNamesChanged) {
+diff --git a/app/src/main/res/layout/fragment_downloads.xml b/app/src/main/res/layout/fragment_downloads.xml
+index 440f2d8..58a107e 100644
+--- a/app/src/main/res/layout/fragment_downloads.xml
++++ b/app/src/main/res/layout/fragment_downloads.xml
+@@ -8,33 +8,57 @@
+         android:background="?attr/primaryGrayBackground"
+         android:orientation="vertical">
+ 
+-    <FrameLayout
+-            android:visibility="visible"
+-            android:layout_height="40dp"
++    <LinearLayout
++            android:layout_height="48dp"
+             android:layout_margin="10dp"
+-            android:background="@drawable/search_background"
+-            android:layout_width="match_parent">
+-
+-        <androidx.appcompat.widget.SearchView
+-                android:animateLayoutChanges="true"
+-                android:id="@+id/download_search"
+-                app:queryBackground="@color/transparent"
+-                app:searchIcon="@drawable/search_icon"
+-                android:paddingStart="-10dp"
+-                android:iconifiedByDefault="false"
+-                app:queryHint="@string/search_downloads"
+-                android:layout_width="match_parent"
++            android:layout_width="match_parent"
++            android:orientation="horizontal">
++
++        <FrameLayout
+                 android:layout_height="match_parent"
++                android:layout_width="0dp"
++                android:layout_weight="1"
++                android:layout_marginEnd="4dp"
++                android:background="@drawable/search_background">
++
++            <androidx.appcompat.widget.SearchView
++                    android:animateLayoutChanges="true"
++                    android:id="@+id/download_search"
++                    app:queryBackground="@color/transparent"
++                    app:searchIcon="@drawable/search_icon"
++                    app:searchHintIcon="@drawable/search_icon"
++                    android:paddingStart="-10dp"
++                    android:iconifiedByDefault="false"
++                    app:queryHint="@string/search_downloads"
++                    android:layout_width="match_parent"
++                    android:layout_height="match_parent"
++                    android:layout_gravity="center_vertical"
++                    tools:ignore="RtlSymmetry" />
++
++        </FrameLayout>
++
++        <!-- Menú de importar + alternar rejilla/lista, como en la app oficial.
++             El botón de continuar de las portadas (resumeReading) no se toca. -->
++        <ImageButton
++                android:id="@+id/download_import_btn"
++                android:layout_width="44dp"
++                android:layout_height="44dp"
+                 android:layout_gravity="center_vertical"
+-                app:iconifiedByDefault="false"
+-                tools:ignore="RtlSymmetry">
+-
+-            <!--app:queryHint="@string/search_hint"
+-             android:background="?attr/primaryGrayBackground" ?attr/itemBackground
+-                        app:searchHintIcon="@drawable/search_white"
+-                        -->
+-        </androidx.appcompat.widget.SearchView>
+-    </FrameLayout>
++                android:background="?attr/selectableItemBackgroundBorderless"
++                android:contentDescription="@string/import_epub"
++                android:src="@drawable/ic_baseline_add_24"
++                app:tint="?attr/iconColor" />
++
++        <ImageButton
++                android:id="@+id/download_layout_toggle"
++                android:layout_width="44dp"
++                android:layout_height="44dp"
++                android:layout_gravity="center_vertical"
++                android:background="?attr/selectableItemBackgroundBorderless"
++                android:contentDescription="@string/grid_view"
++                android:src="@drawable/ic_baseline_grid_view_24"
++                app:tint="?attr/iconColor" />
++    </LinearLayout>
+ 
+     <!--<com.google.android.material.appbar.AppBarLayout
+             android:background="@android:color/transparent"
+diff --git a/app/src/main/res/layout/fragment_result.xml b/app/src/main/res/layout/fragment_result.xml
+index 11f1b75..52a197c 100644
+--- a/app/src/main/res/layout/fragment_result.xml
++++ b/app/src/main/res/layout/fragment_result.xml
+@@ -646,15 +646,61 @@ Translator: Rainbow Turtle" />
+                             <androidx.appcompat.widget.SearchView
+                                 android:id="@+id/chapter_search"
+                                 android:layout_width="match_parent"
+-                                android:layout_height="wrap_content"
++                                android:layout_height="48dp"
+                                 android:layout_marginHorizontal="10dp"
+                                 android:layout_marginVertical="10dp"
+                                 android:background="@drawable/search_background"
+                                 app:iconifiedByDefault="false"
+                                 app:queryBackground="@color/transparent"
+                                 app:queryHint="@string/search_chapters"
++                                app:searchHintIcon="@drawable/search_icon"
+                                 app:searchIcon="@drawable/search_icon" />
+ 
++                            <!-- Filtros rápidos de capítulos (Todo / Descargado / Has leído)
++                                 con el mismo estilo de chips del fork; usan las MISMAS
++                                 preferencias que el panel de filtros existente (chaptersFab) -->
++                            <com.google.android.material.chip.ChipGroup
++                                android:id="@+id/chapter_chips"
++                                android:layout_width="match_parent"
++                                android:layout_height="wrap_content"
++                                android:layout_marginHorizontal="10dp"
++                                app:chipSpacingHorizontal="8dp">
++
++                                <com.google.android.material.chip.Chip
++                                    android:id="@+id/chip_all"
++                                    style="@style/ChipFilled"
++                                    android:layout_width="wrap_content"
++                                    android:layout_height="wrap_content"
++                                    android:text="@string/all"
++                                    app:checkedIconVisible="false" />
++
++                                <com.google.android.material.chip.Chip
++                                    android:id="@+id/chip_downloaded"
++                                    style="@style/ChipFilled"
++                                    android:layout_width="wrap_content"
++                                    android:layout_height="wrap_content"
++                                    android:text="@string/downloaded"
++                                    app:checkedIconVisible="false" />
++
++                                <com.google.android.material.chip.Chip
++                                    android:id="@+id/chip_read"
++                                    style="@style/ChipFilled"
++                                    android:layout_width="wrap_content"
++                                    android:layout_height="wrap_content"
++                                    android:text="@string/has_read"
++                                    app:checkedIconVisible="false" />
++                            </com.google.android.material.chip.ChipGroup>
++
++                            <TextView
++                                android:id="@+id/chapter_count"
++                                android:layout_width="wrap_content"
++                                android:layout_height="wrap_content"
++                                android:layout_gravity="center_horizontal"
++                                android:layout_marginBottom="6dp"
++                                android:textColor="?attr/textColor"
++                                android:textSize="12sp"
++                                tools:text="120 Chapters" />
++
+                             <androidx.recyclerview.widget.RecyclerView
+                                 android:id="@+id/chapter_list"
+ 
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 107b143..574c6f4 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -13,6 +13,8 @@
+ 
+     <string name="search_hint">Search Novels…</string>
+     <string name="search_chapters">Search Chapters…</string>
++    <string name="all">All</string>
++    <string name="chapters_count_filtered" formatted="true">%1$d of %2$d chapters</string>
+     <string name="synopsis">Synopsis</string>
+     <string name="no_data">No Data</string>
+     <string name="no_author">Author not found</string>

@@ -646,14 +646,60 @@ Translator: Rainbow Turtle" />
                             <androidx.appcompat.widget.SearchView
                                 android:id="@+id/chapter_search"
                                 android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
+                                android:layout_height="48dp"
                                 android:layout_marginHorizontal="10dp"
                                 android:layout_marginVertical="10dp"
                                 android:background="@drawable/search_background"
                                 app:iconifiedByDefault="false"
                                 app:queryBackground="@color/transparent"
                                 app:queryHint="@string/search_chapters"
+                                app:searchHintIcon="@drawable/search_icon"
                                 app:searchIcon="@drawable/search_icon" />
+
+                            <!-- Filtros rápidos de capítulos (Todo / Descargado / Has leído)
+                                 con el mismo estilo de chips del fork; usan las MISMAS
+                                 preferencias que el panel de filtros existente (chaptersFab) -->
+                            <com.google.android.material.chip.ChipGroup
+                                android:id="@+id/chapter_chips"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginHorizontal="10dp"
+                                app:chipSpacingHorizontal="8dp">
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chip_all"
+                                    style="@style/ChipFilled"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/all"
+                                    app:checkedIconVisible="false" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chip_downloaded"
+                                    style="@style/ChipFilled"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/downloaded"
+                                    app:checkedIconVisible="false" />
+
+                                <com.google.android.material.chip.Chip
+                                    android:id="@+id/chip_read"
+                                    style="@style/ChipFilled"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/has_read"
+                                    app:checkedIconVisible="false" />
+                            </com.google.android.material.chip.ChipGroup>
+
+                            <TextView
+                                android:id="@+id/chapter_count"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center_horizontal"
+                                android:layout_marginBottom="6dp"
+                                android:textColor="?attr/textColor"
+                                android:textSize="12sp"
+                                tools:text="120 Chapters" />
 
                             <androidx.recyclerview.widget.RecyclerView
                                 android:id="@+id/chapter_list"

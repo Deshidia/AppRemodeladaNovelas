@@ -804,6 +804,48 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         return items
     }
 
+    // Filtros rápidos de capítulos (chips como en la app oficial). Usan las MISMAS
+    // preferencias que el panel de filtros del fork (chaptersFab), así que ambos
+    // quedan siempre sincronizados y no se duplica ningún dato.
+    private fun updateChapterChips(binding: FragmentResultBinding) {
+        val visible = viewModel.chapters.value?.size ?: 0
+        val total = when (val res = viewModel.loadResponse.value) {
+            is Resource.Success -> when (val response = res.value) {
+                is StreamResponse -> response.data.size
+                else -> visible
+            }
+            else -> visible
+        }
+        binding.chapterCount.text = if (visible >= total) {
+            getString(R.string.read_action_chapters_formatted, total)
+        } else {
+            getString(R.string.chapters_count_filtered, visible, total)
+        }
+
+        val read = ResultViewModel.filterChapterByRead
+        val unread = ResultViewModel.filterChapterByUnread
+        val downloaded = ResultViewModel.filterChapterByDownloads
+
+        // En el modelo del fork (categorías combinables con «o») los estados puros son
+        // «todo activo» y «solo una categoría»; los chips reflejan ese estado.
+        binding.chipAll.isChecked = read && unread
+        binding.chipDownloaded.isChecked = downloaded && !read && !unread
+        binding.chipRead.isChecked = read && !unread && !downloaded
+    }
+
+    private fun applyChapterFilter(
+        binding: FragmentResultBinding,
+        read: Boolean,
+        unread: Boolean,
+        downloaded: Boolean
+    ) {
+        ResultViewModel.filterChapterByRead = read
+        ResultViewModel.filterChapterByUnread = unread
+        ResultViewModel.filterChapterByDownloads = downloaded
+        viewModel.reorderChapters()
+        updateChapterChips(binding)
+    }
+
     override fun onBindingCreated(binding: FragmentResultBinding, savedInstanceState: Bundle?) {
         val url = savedInstanceState?.getString("url") ?: arguments?.getString("url")
         ?: throw NotImplementedError()
@@ -1011,6 +1053,31 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 } else {
                     adapter.submitList(chapters)
                 }
+            }
+            updateChapterChips(binding)
+        }
+
+        // Chips de filtro rápido (Todo / Descargado / Has leído): un toque activa,
+        // otro toque vuelve a Todo, como el ciclo de la app oficial
+        binding.chipAll.setOnClickListener {
+            applyChapterFilter(binding, read = true, unread = true, downloaded = true)
+        }
+        binding.chipDownloaded.setOnClickListener {
+            val wasDownloadedOnly = ResultViewModel.filterChapterByDownloads &&
+                !ResultViewModel.filterChapterByRead && !ResultViewModel.filterChapterByUnread
+            if (wasDownloadedOnly) {
+                applyChapterFilter(binding, read = true, unread = true, downloaded = true)
+            } else {
+                applyChapterFilter(binding, read = false, unread = false, downloaded = true)
+            }
+        }
+        binding.chipRead.setOnClickListener {
+            val wasReadOnly = ResultViewModel.filterChapterByRead &&
+                !ResultViewModel.filterChapterByUnread && !ResultViewModel.filterChapterByDownloads
+            if (wasReadOnly) {
+                applyChapterFilter(binding, read = true, unread = true, downloaded = true)
+            } else {
+                applyChapterFilter(binding, read = true, unread = false, downloaded = false)
             }
         }
 
