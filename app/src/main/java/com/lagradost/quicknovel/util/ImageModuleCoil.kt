@@ -1,4 +1,4 @@
-package com.lagradost.cloudstream3.utils
+package com.lagradost.quicknovel.util
 
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
@@ -27,7 +27,6 @@ import com.lagradost.nicehttp.ignoreAllSSLErrors
 import com.lagradost.quicknovel.BuildConfig
 import com.lagradost.quicknovel.network.CloudflareKiller
 import com.lagradost.quicknovel.ui.UiImage
-import com.lagradost.quicknovel.util.DefaultImagesHeaders
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -170,6 +169,7 @@ object ImageLoader {
         is UiImage.Bitmap -> loadImageInternal(imageData = imageData.bitmap, builder = builder)
         is UiImage.Drawable -> loadImageInternal(imageData = imageData.resId, builder = builder)
         null -> loadImageInternal(null, builder = builder)
+        is UiImage.Uri -> loadImageInternal(imageData = imageData.uri, builder = builder)
     }
 
     fun ImageView.loadImage(

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Recursos upstream que los archivos adoptados referencian y el fork no
+         define (su values se conserva intacto). Injerto aditivo generado
+         por scripts/build_patch_qn.py. -->
+
+    <item name="search_close_btn" type="id" />
+    <item name="search_mag_icon" type="id" />
+    <string name="all">All</string>
+    <string name="apk_installer_legacy">Legacy</string>
+    <string name="apk_installer_package_installer">PackageInstaller</string>
+    <string name="apk_installer_settings">APK Installer</string>
+    <string name="apk_installer_settings_des">Some devices do not support the new package installer. Try the legacy option if updates do not install.</string>
+    <string name="not_downloaded">Not downloaded</string>
+    <string name="not_read">Not read</string>
+    <string name="release_sort">Release order</string>
+    <string name="search_chapters_hint">Search Chapters…</string>
+    <string name="selected_format" formatted="true">Selected %d</string>
+    <string name="skip_update">Skip update</string>
+    <string name="spoilers">Spoilers</string>
+    <string name="update_notification_downloading">Downloading app update…</string>
+
+</resources>
