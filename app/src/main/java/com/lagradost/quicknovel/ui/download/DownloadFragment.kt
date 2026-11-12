@@ -34,6 +34,7 @@ import com.lagradost.quicknovel.TTSGlobalState
 import com.lagradost.quicknovel.ui.BaseFragment
 import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.UiImage
+import com.lagradost.quicknovel.ui.clear
 import com.lagradost.quicknovel.ui.img
 import com.lagradost.quicknovel.util.SettingsHelper.getDownloadIsCompact
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
