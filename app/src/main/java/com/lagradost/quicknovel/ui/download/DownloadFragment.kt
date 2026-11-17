@@ -3,7 +3,6 @@ package com.lagradost.quicknovel.ui.download
 import android.annotation.SuppressLint
 import android.view.View
 import android.widget.ImageView
-import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -24,7 +23,6 @@ import com.lagradost.quicknovel.DOWNLOAD_NORMAL_SORTING_METHOD
 import com.lagradost.quicknovel.DOWNLOAD_SETTINGS
 import com.lagradost.quicknovel.DOWNLOAD_SORTING_METHOD
 import com.lagradost.quicknovel.DownloadState
-import com.lagradost.quicknovel.MainActivity
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.databinding.FragmentDownloadsBinding
 import com.lagradost.quicknovel.databinding.SortBottomSheetBinding
@@ -135,7 +133,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
     lateinit var searchExitIcon: ImageView
     lateinit var searchMagIcon: ImageView
     private var tabLayoutMediator: TabLayoutMediator? = null
-    private var pagerAdapter: ViewpagerAdapter? = null
 
     override fun onResume() {
         super.onResume()
@@ -173,6 +170,8 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
         searchExitIcon =
             binding.downloadSearch.findViewById(androidx.appcompat.R.id.search_close_btn)
         searchMagIcon = binding.downloadSearch.findViewById(androidx.appcompat.R.id.search_mag_icon)
+        searchMagIcon.scaleX = 0.65f
+        searchMagIcon.scaleY = 0.65f
 
         binding.downloadSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String): Boolean {
@@ -186,20 +185,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
             }
         })
 
-        // Menú "+" como en la app oficial: importar libro y actualizar
-        binding.downloadImportBtn.setOnClickListener { view ->
-            val popup = PopupMenu(view.context, view)
-            popup.menu.add(getString(R.string.import_epub)).setOnMenuItemClickListener {
-                MainActivity.importEpub()
-                true
-            }
-            popup.menu.add(getString(R.string.refresh)).setOnMenuItemClickListener {
-                viewModel.refresh()
-                true
-            }
-            popup.show()
-        }
-
 
         val adapter = ViewpagerAdapter(viewModel, this) { isScrollingDown ->
             if (isScrollingDown)
@@ -207,7 +192,6 @@ class DownloadFragment : BaseFragment<FragmentDownloadsBinding>(
             else
                 binding.downloadFab.extend()
         }
-        pagerAdapter = adapter
 
         observe(viewModel.pages) { pages ->
             adapter.submitList(pages)
