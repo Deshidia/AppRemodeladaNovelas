@@ -10,6 +10,8 @@
     <string name="all">All</string>
     <string name="apk_installer_legacy">Legacy</string>
     <string name="apk_installer_package_installer">PackageInstaller</string>
+    <string name="apk_installer_settings">APK Installer</string>
+    <string name="apk_installer_settings_des">Some devices do not support the new package installer. Try the legacy option if updates do not install.</string>
     <string name="not_downloaded">Not downloaded</string>
     <string name="not_read">Not read</string>
     <string name="release_sort">Release order</string>
