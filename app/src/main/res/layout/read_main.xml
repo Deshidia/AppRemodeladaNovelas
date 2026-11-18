@@ -559,18 +559,20 @@
                 android:paddingBottom="12dp"
                 tools:listitem="@layout/item_untranslated_term" />
 
-            <TextView
-                android:id="@+id/untranslated_note"
+            <!-- Función Sustituir directamente desde el panel, sin pasar por los ajustes del lector -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/untranslated_open_replace"
+                style="@style/BlackButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="?attr/primaryBlackBackground"
-                android:paddingStart="16dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="16dp"
-                android:paddingBottom="10dp"
-                android:text="@string/untranslated_note"
-                android:textColor="?attr/grayTextColor"
-                android:textSize="11sp" />
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="12dp"
+                android:text="@string/replace_tab"
+                app:icon="@drawable/ic_baseline_edit_24"
+                app:iconGravity="textStart"
+                app:iconSize="18dp" />
         </LinearLayout>
     </FrameLayout>
 </FrameLayout>

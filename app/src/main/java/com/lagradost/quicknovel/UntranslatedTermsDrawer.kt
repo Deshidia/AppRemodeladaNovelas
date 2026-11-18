@@ -2,16 +2,19 @@ package com.lagradost.quicknovel
 
 import android.os.Handler
 import android.os.Looper
+import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import android.view.ViewGroup
 import android.widget.FrameLayout
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.databinding.DialogUntranslatedTermBinding
 import com.lagradost.quicknovel.databinding.ItemUntranslatedTermBinding
+import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
 import com.lagradost.quicknovel.databinding.ReadMainBinding
+import androidx.core.widget.NestedScrollView
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ReplaceTiming
 import com.lagradost.quicknovel.util.TextReplacement
@@ -28,6 +31,9 @@ import kotlin.math.min
  * traducción al español (propuesta del motor activo o la que el usuario escribió); al aceptar,
  * se añade como sustitución "después de traducir" en la pestaña Sustituir del libro y el
  * capítulo se corrige en el momento (la traducción viene de caché: solo se re-aplican reglas).
+ *
+ * En la parte de abajo hay un botón que abre la función Sustituir directamente, sin pasar por
+ * los ajustes del lector: el mismo editor de reglas, pero en su propia hoja inferior.
  */
 class UntranslatedTermsDrawer(
     private val activity: ReadActivity2,
@@ -98,7 +104,7 @@ class UntranslatedTermsDrawer(
                     activity.colorFromAttribute(R.attr.grayTextColor)
             )
 
-            // ya aceptada: marca verde y nada que editar (se puede cambiar en Ajustes → Sustituir)
+            // ya aceptada: marca verde y nada que editar (se puede cambiar en Sustituir)
             item.untranslatedTermState.setImageResource(
                 if (row.state == TermState.SAVED) R.drawable.ic_baseline_check_24
                 else R.drawable.ic_baseline_edit_24
@@ -128,6 +134,10 @@ class UntranslatedTermsDrawer(
             untranslatedList.adapter = adapter
             untranslatedScrim.setOnClickListener { close() }
             untranslatedClose.setOnClickListener { close() }
+            untranslatedOpenReplace.setOnClickListener {
+                close()
+                openReplaceSheet()
+            }
         }
     }
 
@@ -141,6 +151,8 @@ class UntranslatedTermsDrawer(
         adapter.notifyDataSetChanged()
         setEmpty(activity.getString(R.string.untranslated_searching))
         binding.untranslatedSubtitle.text = currentSubtitle()
+        // sin título de libro aún no hay clave para las sustituciones: no abriría nada
+        binding.untranslatedOpenReplace.isVisible = viewModel.replacementsNovelName() != null
 
         showPanel()
 
@@ -180,6 +192,50 @@ class UntranslatedTermsDrawer(
             .withEndAction { binding.untranslatedDrawerRoot.isVisible = false }
             .start()
         binding.untranslatedScrim.animate().alpha(0f).setDuration(200L).start()
+    }
+
+    /**
+     * Abre la función Sustituir directamente, sin los ajustes del lector: reutiliza el mismo
+     * editor ([ReadReplaceTab]) pero mostrando solo su contenedor en una hoja propia. Igual
+     * que al cerrar los ajustes, las reglas se re-aplican al capítulo al cerrar la hoja.
+     */
+    private fun openReplaceSheet() {
+        val novelName = viewModel.replacementsNovelName() ?: return
+        val dialog = BottomSheetDialog(activity)
+
+        val sheetBinding = ReadBottomSettingsBinding.inflate(activity.layoutInflater)
+        // solo el editor de sustituciones: se despega del resto del layout de ajustes
+        val container = sheetBinding.tabReplaceContainer
+        (container.parent as? ViewGroup)?.removeView(container)
+        container.isVisible = true
+
+        // scroll como en los ajustes, por si la lista de reglas no cabe en pantalla
+        val scroll = NestedScrollView(activity)
+        scroll.addView(
+            container,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        // parámetros explícitos: la vista inflada sin padre no trae su ancho del XML
+        dialog.setContentView(
+            scroll,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        var replacementsChanged = false
+        ReadReplaceTab(activity, sheetBinding, novelName) {
+            replacementsChanged = true
+        }.setup()
+
+        dialog.setOnDismissListener {
+            if (replacementsChanged) viewModel.reapplyReplacements()
+        }
+        dialog.show()
     }
 
     private fun currentSubtitle(): String {

@@ -400,7 +400,7 @@
     <string name="replace_import_done">Imported: %1$d new, %2$d updated</string>
     <string name="replace_import_nothing_new">This novel already had those replacements</string>
     <string name="replace_reader_novel">Replacements for: %s</string>
-    <string name="replace_reader_note">When you close the settings, the changes are applied to the chapters that are open. They are saved for this book, so they also apply when you open it again.</string>
+    <string name="replace_reader_note">When you close this screen, the changes are applied to the chapters that are open. They are saved for this book, so they also apply when you open it again.</string>
     <string name="replace_applying">Applying replacements</string>
 
     <!-- Search by original title / migrate to another provider -->
@@ -466,5 +466,4 @@
     <string name="untranslated_accept">Add to Replace</string>
     <string name="untranslated_saved">Replacement added: %1$s → %2$s</string>
     <string name="untranslated_need_translation">Enter the translation before accepting</string>
-    <string name="untranslated_note">Replacements are saved for this book, so they also apply to the next chapters. You can edit them in Settings → Replace.</string>
 </resources>
