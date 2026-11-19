@@ -2462,12 +2462,76 @@ object BookDownloader2 {
         translation: DownloadTranslation? = null
     ) {
         val id = generateId(load, api.name)
+
+        // Descarga por selección de capítulos (igual que la app oficial): si hay una
+        // selección pendiente para esta novela, se descargan solo esos capítulos.
+        val selection = chapterSelections.remove(id)
+        if (selection != null) {
+            downloadWorkThread(load, api, selection, translation)
+            return
+        }
+
         val desiredStart = (
                 getKey<Int>(
                     DOWNLOAD_OFFSET, id.toString(),
                 ) ?: 0
                 ).coerceIn(0, load.data.size)
-        downloadWorkThread(load, api, desiredStart until load.data.size, translation)
+        downloadWorkThread(load, api, (desiredStart until load.data.size).toList(), translation)
+    }
+
+    /** Selecciones de capítulos pendientes por id de novela (descarga por selección). */
+    private val chapterSelections = java.util.concurrent.ConcurrentHashMap<Int, List<Int>>()
+
+    /**
+     * Descarga en curso por id de novela, igual que pendingChapters de la app oficial:
+     * la cola de capítulos que quedan por descargar (sin contar los ya descargados) y
+     * el capítulo que se está descargando ahora mismo. Al terminar o fallar se limpian.
+     */
+    private val chapterPending = java.util.concurrent.ConcurrentHashMap<Int, List<Int>>()
+    private val chapterProgressIndex = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+
+    /** Cola de capítulos pendientes de la descarga activa (null si no hay descarga). */
+    fun pendingChapters(id: Int): List<Int>? = chapterPending[id]
+
+    /** Capítulo que se está descargando ahora (null si no hay descarga activa). */
+    fun currentDownloadingChapter(id: Int): Int? = chapterProgressIndex[id]
+
+    /**
+     * Descarga exactamente los capítulos [chapters] (índices absolutos), como el
+     * paquete Chapters(BitSet) de la app oficial. Solo se acepta si la novela no tiene
+     * ninguna descarga activa o pendiente (con ExistingWorkPolicy.KEEP el worker ignoraría
+     * esta petición y la selección quedaría encolada para más adelante).
+     */
+    suspend fun downloadChapters(
+        load: LoadResponse,
+        chapters: Collection<Int>,
+        translation: DownloadTranslation? = null
+    ) {
+        val context = activity ?: return
+        if (load.apiName == IMPORT_SOURCE || load.apiName == IMPORT_SOURCE_PDF) {
+            return
+        }
+        val streamResponse = load as? StreamResponse ?: return
+        val total = streamResponse.data.size
+        val indices = chapters.filter { it in 0 until total }.distinct().sorted()
+        if (indices.isEmpty()) return
+
+        val id = generateId(load, load.apiName)
+
+        downloadInfoMutex.withLock {
+            val current = downloadProgress[id]
+            if (current != null && current.state == DownloadState.IsPaused ||
+                current != null && current.state == DownloadState.IsDownloading ||
+                current != null && current.state == DownloadState.IsPending
+            ) {
+                // ya hay una descarga en marcha: la selección se descarta
+                chapterSelections.remove(id)
+                return@withLock
+            }
+
+            chapterSelections[id] = indices
+            DownloadFileWorkManager.download(load, context, translation)
+        }
     }
 
     private fun translationErrorMessage(context: Context, index: Int, t: Throwable): String {
@@ -2487,9 +2551,10 @@ object BookDownloader2 {
     suspend fun downloadWorkThread(
         load: StreamResponse,
         api: APIRepository,
-        range: ClosedRange<Int>,
+        chapters: List<Int>,
         translation: DownloadTranslation? = null
     ) {
+        if (chapters.isEmpty()) return
         val context = activity ?: return
         val filesDir = context.filesDir
         val sApiName = BookDownloader2Helper.sanitizeFilename(api.name)
@@ -2498,13 +2563,20 @@ object BookDownloader2 {
         val sName = BookDownloader2Helper.sanitizeFilename(load.name)
         val id = generateId(load, api.name)
 
-        val totalItems = range.endInclusive + 1
-        val alreadyDownloaded =
-            (filesDir.listFiles()?.mapNotNull { it.nameWithoutExtension.toIntOrNull() }
-                ?.count { it < range.start } ?: 0).toLong()
+        val totalItems = load.data.size
+        val filesAlreadyDownloaded =
+            filesDir.listFiles()?.mapNotNull { it.nameWithoutExtension.toIntOrNull() }?.toSet()
+                ?: emptySet()
+        val alreadyDownloaded = filesAlreadyDownloaded
+            .count { it < (chapters.firstOrNull() ?: 0) }.toLong()
         //println("alreadyDownloaded:$alreadyDownloaded")
         //println("totalItems:$totalItems")
         setPrefixData(load, api.name, totalItems.toLong(), alreadyDownloaded)
+
+        // cola visible para los iconos de la lista de capítulos (pendingChapters de la
+        // app oficial): lo que se pidió menos lo que ya está descargado en disco
+        chapterPending[id] = chapters.filterNot { filesAlreadyDownloaded.contains(it) }
+        chapterProgressIndex.remove(id)
 
         var downloadedTotal = 0L // how many successful get requests
         var translatedTotal = 0 // how many chapters have been rewritten with their translation
@@ -2530,8 +2602,11 @@ object BookDownloader2 {
             var currentState = DownloadState.IsDownloading
             var timePerLoadMs = 1000.0
 
-            for (index in range.start..range.endInclusive) {
+            for ((position, index) in chapters.withIndex()) {
                 val data = load.data.getOrNull(index) ?: continue
+                chapterProgressIndex[id] = index
+                chapterPending[id] = chapters.drop(position + 1)
+                    .filterNot { filesAlreadyDownloaded.contains(it) }
 
                 // consume any action and wait until not paused
                 while (true) {
@@ -2616,7 +2691,7 @@ object BookDownloader2 {
                     currentState = DownloadState.IsFailed
                 }
 
-                val processedItems = index - range.start +
+                val processedItems = position +
                         if (hasDownloadedChapter) {
                             1
                         } else {
@@ -2631,7 +2706,7 @@ object BookDownloader2 {
                     this.progress = index.toLong() + 1L
                     this.downloaded = processedItems.toLong() + alreadyDownloaded
                     state = currentState
-                    etaMs = (timePerLoadMs * (range.endInclusive - index)).toLong()
+                    etaMs = (timePerLoadMs * (chapters.size - position - 1)).toLong()
                 }?.let { progressState ->
                     createNotification(id, load, progressState)
                 }
@@ -2665,7 +2740,7 @@ object BookDownloader2 {
 
             changeDownload(id) {
                 this.progress = totalItems.toLong()
-                this.downloaded = range.endInclusive + 1 - range.start + alreadyDownloaded
+                this.downloaded = chapters.size + alreadyDownloaded
                 state = DownloadState.IsDone
             }?.let { progressState ->
                 // only notify done if we have actually done some work
@@ -2684,6 +2759,9 @@ object BookDownloader2 {
                 setSuffixData(load, api.name)
             }
         } finally {
+            // la descarga terminó (o falló): ya no hay cola ni capítulo en curso
+            chapterPending.remove(id)
+            chapterProgressIndex.remove(id)
             // el EPUB ya generado tiene el texto antiguo: que se vuelva a generar al abrirlo
             if (translatedTotal > 0) {
                 removeKey(DOWNLOAD_EPUB_SIZE, id.toString())

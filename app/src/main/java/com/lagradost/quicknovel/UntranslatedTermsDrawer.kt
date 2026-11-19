@@ -1,23 +1,20 @@
 package com.lagradost.quicknovel
 
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
+import android.view.ViewGroup
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
-import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import android.view.ViewGroup
 import android.widget.FrameLayout
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.databinding.DialogUntranslatedTermBinding
 import com.lagradost.quicknovel.databinding.ItemUntranslatedTermBinding
+import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
 import com.lagradost.quicknovel.databinding.ReadMainBinding
-import com.lagradost.quicknovel.ui.ScrollIndex
-import com.lagradost.quicknovel.ui.SearchHighlight
+import androidx.core.widget.NestedScrollView
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
 import com.lagradost.quicknovel.util.ReplaceTiming
 import com.lagradost.quicknovel.util.TextReplacement
@@ -29,17 +26,14 @@ import com.lagradost.quicknovel.util.toPx
 import kotlin.math.min
 
 /**
- * Menú lateral del lector (sale del borde derecho) con los términos que quedaron sin traducir
- * en el capítulo actual. Se abre deslizando de derecha a izquierda sobre el texto. Cada término
- * se muestra con su traducción al español (propuesta del motor activo o la que el usuario
- * escribió); al aceptar, se añade como sustitución "después de traducir" en la pestaña
- * Sustituir del libro y el capítulo se corrige en el momento (la traducción viene de caché:
- * solo se re-aplican reglas).
+ * Menú lateral del lector con los términos que quedaron sin traducir en el capítulo actual.
+ * Se abre deslizando de izquierda a derecha sobre el texto. Cada término se muestra con su
+ * traducción al español (propuesta del motor activo o la que el usuario escribió); al aceptar,
+ * se añade como sustitución "después de traducir" en la pestaña Sustituir del libro y el
+ * capítulo se corrige en el momento (la traducción viene de caché: solo se re-aplican reglas).
  *
- * Además incluye una búsqueda para navegar por el capítulo actual (sin guardar sustituciones):
- * escribir y saltar entre coincidencias con las flechas; todas quedan subrayadas en el texto
- * (cian, distinto del marcador del usuario) y la que se visita lleva tinte. Al navegar, el
- * panel se cierra y una píldora flotante permite seguir avanzando mientras se lee.
+ * En la parte de abajo hay un botón que abre la función Sustituir directamente, sin pasar por
+ * los ajustes del lector: el mismo editor de reglas, pero en su propia hoja inferior.
  */
 class UntranslatedTermsDrawer(
     private val activity: ReadActivity2,
@@ -51,27 +45,6 @@ class UntranslatedTermsDrawer(
 
     var isOpen = false
         private set
-
-    // búsqueda para navegar por el capítulo: el texto mostrado lo aporta el lector y el
-    // salto a cada coincidencia lo hace el lector con su scroll exacto (el del TTS)
-    var searchTextProvider: (() -> List<TextSpan>)? = null
-    var onSearchNavigate: ((ScrollIndex) -> Unit)? = null
-
-    // subrayado de las coincidencias en el texto (lo pinta TextAdapter/RoundedBgTextView)
-    var onSearchHighlight: ((List<SearchHighlight>, SearchHighlight?) -> Unit)? = null
-
-    /** Una coincidencia de búsqueda: span del texto + offset local dentro del span. */
-    private class SearchMatch(val span: TextSpan, val local: Int) {
-        fun toScrollIndex() = ScrollIndex(span.index, span.innerIndex, span.start + local)
-    }
-
-    private var searchMatches = emptyList<SearchMatch>()
-    private var searchIndex = -1
-    private var lastSearchQuery: String? = null
-
-    // el repintado del subrayado se difiere por si se escriben varias letras seguidas
-    private val highlightHandler = Handler(Looper.getMainLooper())
-    private var highlightRunnable: Runnable? = null
 
     private enum class TermState {
         /** buscando propuesta con el motor activo */
@@ -92,7 +65,6 @@ class UntranslatedTermsDrawer(
         val count: Int,
         var state: TermState,
         var translation: String?,
-        var example: String? = null,
     )
 
     private val rows = ArrayList<TermRow>()
@@ -132,7 +104,7 @@ class UntranslatedTermsDrawer(
                     activity.colorFromAttribute(R.attr.grayTextColor)
             )
 
-            // ya aceptada: marca verde y nada que editar (se puede cambiar en Ajustes → Sustituir)
+            // ya aceptada: marca verde y nada que editar (se puede cambiar en Sustituir)
             item.untranslatedTermState.setImageResource(
                 if (row.state == TermState.SAVED) R.drawable.ic_baseline_check_24
                 else R.drawable.ic_baseline_edit_24
@@ -162,23 +134,9 @@ class UntranslatedTermsDrawer(
             untranslatedList.adapter = adapter
             untranslatedScrim.setOnClickListener { close() }
             untranslatedClose.setOnClickListener { close() }
-            untranslatedSearchInput.doAfterTextChanged { editable ->
-                runSearch(editable?.toString().orEmpty())
-            }
-            untranslatedSearchInput.setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                    navigateSearch(1)
-                    true
-                } else {
-                    false
-                }
-            }
-            untranslatedSearchPrev.setOnClickListener { navigateSearch(-1) }
-            untranslatedSearchNext.setOnClickListener { navigateSearch(1) }
-            untranslatedSearchPillPrev.setOnClickListener { navigateSearch(-1) }
-            untranslatedSearchPillNext.setOnClickListener { navigateSearch(1) }
-            untranslatedSearchPillClose.setOnClickListener {
-                untranslatedSearchPill.isVisible = false
+            untranslatedOpenReplace.setOnClickListener {
+                close()
+                openReplaceSheet()
             }
         }
     }
@@ -193,11 +151,8 @@ class UntranslatedTermsDrawer(
         adapter.notifyDataSetChanged()
         setEmpty(activity.getString(R.string.untranslated_searching))
         binding.untranslatedSubtitle.text = currentSubtitle()
-
-        // la píldora sobra con el panel abierto; se restaura la última búsqueda
-        binding.untranslatedSearchPill.isVisible = false
-        binding.untranslatedSearchInput.setText(lastSearchQuery.orEmpty())
-        runSearch(lastSearchQuery.orEmpty())
+        // sin título de libro aún no hay clave para las sustituciones: no abriría nada
+        binding.untranslatedOpenReplace.isVisible = viewModel.replacementsNovelName() != null
 
         showPanel()
 
@@ -206,10 +161,6 @@ class UntranslatedTermsDrawer(
             val terms = texts?.let { (original, translated) ->
                 UntranslatedTerms.find(original, translated, viewModel.mlToLanguage)
             } ?: emptyList()
-            // primera frase del capítulo con cada término, para el diálogo de traducción
-            val examples = texts?.second?.let { translated ->
-                terms.associate { it.term to UntranslatedTerms.exampleSentence(translated, it.term) }
-            } ?: emptyMap()
 
             activity.runOnUiThread {
                 if (!isOpen) return@runOnUiThread
@@ -222,9 +173,7 @@ class UntranslatedTermsDrawer(
                     return@runOnUiThread
                 }
                 rows.clear()
-                rows.addAll(terms.map {
-                    TermRow(it.term, it.count, TermState.LOADING, null, examples[it.term])
-                })
+                rows.addAll(terms.map { TermRow(it.term, it.count, TermState.LOADING, null) })
                 binding.untranslatedEmpty.isVisible = false
                 adapter.notifyDataSetChanged()
                 fetchSuggestions()
@@ -237,18 +186,56 @@ class UntranslatedTermsDrawer(
         isOpen = false
         onStateChanged?.invoke(false)
 
-        // al cerrar se quita el foco y el teclado: que no persista sobre el texto
-        binding.untranslatedSearchInput.clearFocus()
-        (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-            .hideSoftInputFromWindow(binding.untranslatedSearchInput.windowToken, 0)
-
-        // el panel sale por la derecha, donde está anclado (layout_gravity="end")
         binding.untranslatedDrawer.animate()
-            .translationX(binding.untranslatedDrawer.width.toFloat())
+            .translationX(-binding.untranslatedDrawer.width.toFloat())
             .setDuration(200L)
             .withEndAction { binding.untranslatedDrawerRoot.isVisible = false }
             .start()
         binding.untranslatedScrim.animate().alpha(0f).setDuration(200L).start()
+    }
+
+    /**
+     * Abre la función Sustituir directamente, sin los ajustes del lector: reutiliza el mismo
+     * editor ([ReadReplaceTab]) pero mostrando solo su contenedor en una hoja propia. Igual
+     * que al cerrar los ajustes, las reglas se re-aplican al capítulo al cerrar la hoja.
+     */
+    private fun openReplaceSheet() {
+        val novelName = viewModel.replacementsNovelName() ?: return
+        val dialog = BottomSheetDialog(activity)
+
+        val sheetBinding = ReadBottomSettingsBinding.inflate(activity.layoutInflater)
+        // solo el editor de sustituciones: se despega del resto del layout de ajustes
+        val container = sheetBinding.tabReplaceContainer
+        (container.parent as? ViewGroup)?.removeView(container)
+        container.isVisible = true
+
+        // scroll como en los ajustes, por si la lista de reglas no cabe en pantalla
+        val scroll = NestedScrollView(activity)
+        scroll.addView(
+            container,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        // parámetros explícitos: la vista inflada sin padre no trae su ancho del XML
+        dialog.setContentView(
+            scroll,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        var replacementsChanged = false
+        ReadReplaceTab(activity, sheetBinding, novelName) {
+            replacementsChanged = true
+        }.setup()
+
+        dialog.setOnDismissListener {
+            if (replacementsChanged) viewModel.reapplyReplacements()
+        }
+        dialog.show()
     }
 
     private fun currentSubtitle(): String {
@@ -269,8 +256,8 @@ class UntranslatedTermsDrawer(
             (binding.untranslatedDrawer.layoutParams as FrameLayout.LayoutParams).apply {
                 this.width = width
             }
-        // ya colocado fuera de la pantalla (por la derecha), sin parpadeo al hacerse visible
-        binding.untranslatedDrawer.translationX = width.toFloat()
+        // ya colocado fuera de la pantalla, sin parpadeo al hacerse visible
+        binding.untranslatedDrawer.translationX = -width.toFloat()
         binding.untranslatedScrim.alpha = 0f
         binding.untranslatedDrawerRoot.isVisible = true
 
@@ -307,132 +294,10 @@ class UntranslatedTermsDrawer(
         }
     }
 
-    /** Busca el texto en los spans mostrados del capítulo y actualiza el contador. */
-    private fun runSearch(query: String) {
-        lastSearchQuery = query
-        val trimmed = query.trim()
-        searchMatches = if (trimmed.isEmpty()) emptyList() else findMatches(trimmed)
-        searchIndex = -1
-        binding.untranslatedSearchCount.isVisible = trimmed.isNotEmpty()
-        if (trimmed.isNotEmpty()) updateSearchCount()
-        // el subrayado se difiere un poco para no repintar el texto en cada pulsación
-        postSearchHighlights(250L)
-    }
-
-    /** Envía al lector las coincidencias a subrayar (todas, y cuál es la que se visita). */
-    private fun postSearchHighlights(delayMs: Long = 0L) {
-        highlightRunnable?.let { highlightHandler.removeCallbacks(it) }
-        val runnable = Runnable { doPostSearchHighlights() }
-        highlightRunnable = runnable
-        if (delayMs > 0) highlightHandler.postDelayed(runnable, delayMs) else highlightHandler.post(runnable)
-    }
-
-    private fun doPostSearchHighlights() {
-        val query = lastSearchQuery?.trim().orEmpty()
-        if (query.isEmpty() || searchMatches.isEmpty()) {
-            onSearchHighlight?.invoke(emptyList(), null)
-            return
-        }
-        val current = searchMatches.getOrNull(searchIndex)
-        onSearchHighlight?.invoke(
-            searchMatches.map { SearchHighlight(it.span.innerIndex, it.local, it.local + query.length) },
-            current?.let { SearchHighlight(it.span.innerIndex, it.local, it.local + query.length) }
-        )
-    }
-
-    private fun updateSearchCount() {
-        binding.untranslatedSearchCount.text = when {
-            searchMatches.isEmpty() -> activity.getString(R.string.untranslated_search_none)
-            searchIndex >= 0 -> activity.getString(
-                R.string.untranslated_search_progress,
-                searchIndex + 1,
-                searchMatches.size
-            )
-            else -> searchMatches.size.toString()
-        }
-    }
-
-    /** Coincidencias (sin importar mayúsculas) sobre el texto mostrado del capítulo. */
-    private fun findMatches(query: String): List<SearchMatch> {
-        val spans = searchTextProvider?.invoke().orEmpty()
-        val matches = ArrayList<SearchMatch>()
-        for (span in spans) {
-            val text = span.text.toString()
-            var from = 0
-            while (true) {
-                val at = text.indexOf(query, from, ignoreCase = true)
-                if (at < 0) break
-                matches.add(SearchMatch(span, at))
-                from = at + query.length
-            }
-            if (matches.size > 5000) break // red de seguridad ante capítulos patológicos
-        }
-        return matches
-    }
-
-    /**
-     * Salta a la coincidencia anterior/siguiente (con vuelta al inicio/fin). Recalcula antes
-     * por si el texto cambió (sustituciones aceptadas, capítulo nuevo). Con el panel abierto
-     * lo cierra y deja una píldora flotante para seguir navegando mientras se lee.
-     */
-    private fun navigateSearch(delta: Int) {
-        val query = lastSearchQuery?.trim().orEmpty()
-        if (query.isEmpty()) return
-
-        val matches = findMatches(query)
-        if (matches.isEmpty()) {
-            searchMatches = emptyList()
-            searchIndex = -1
-            updateSearchCount()
-            showToast(R.string.untranslated_search_none)
-            return
-        }
-
-        val prevChar = searchMatches.getOrNull(searchIndex)?.let { it.span.start + it.local }
-        searchMatches = matches
-        searchIndex = if (prevChar == null) {
-            if (delta > 0) 0 else matches.size - 1
-        } else {
-            val kept = matches.indexOfFirst { it.span.start + it.local >= prevChar }
-                .let { if (it < 0) 0 else it }
-            val next = kept + delta
-            when {
-                next >= matches.size -> 0
-                next < 0 -> matches.size - 1
-                else -> next
-            }
-        }
-
-        updateSearchCount()
-        postSearchHighlights()
-        onSearchNavigate?.invoke(searchMatches[searchIndex].toScrollIndex())
-        if (isOpen) close()
-        showPill()
-    }
-
-    private fun showPill() {
-        binding.untranslatedSearchPillCount.text = activity.getString(
-            R.string.untranslated_search_progress,
-            searchIndex + 1,
-            searchMatches.size
-        )
-        binding.untranslatedSearchPill.isVisible = true
-    }
-
     private fun showEditDialog(position: Int) {
         val row = rows.getOrNull(position) ?: return
         val dialogBinding = DialogUntranslatedTermBinding.inflate(activity.layoutInflater)
         dialogBinding.dialogUntranslatedValue.setText(row.translation.orEmpty())
-
-        // contexto: primera frase del capítulo que contiene el término
-        val example = row.example
-        if (example.isNullOrBlank()) {
-            dialogBinding.dialogUntranslatedExample.isVisible = false
-        } else {
-            dialogBinding.dialogUntranslatedExample.text =
-                activity.getString(R.string.untranslated_example, example)
-            dialogBinding.dialogUntranslatedExample.isVisible = true
-        }
 
         val dialog = AlertDialog.Builder(activity, R.style.AlertDialogCustom)
             .setTitle(row.term)
@@ -479,12 +344,6 @@ class UntranslatedTermsDrawer(
         row.state = TermState.SAVED
         row.translation = translation
         adapter.notifyItemChanged(position)
-
-        // el texto va a cambiar (reapplyReplacements): quita el subrayado de la búsqueda,
-        // que dejaría de coincidir con las posiciones; se recalcula al navegar de nuevo
-        searchMatches = emptyList()
-        searchIndex = -1
-        postSearchHighlights()
 
         showToast(activity.getString(R.string.untranslated_saved, row.term, translation))
         scheduleApply()
