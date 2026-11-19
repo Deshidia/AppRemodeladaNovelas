@@ -655,6 +655,65 @@ Translator: Rainbow Turtle" />
                                 app:queryHint="@string/search_chapters"
                                 app:searchIcon="@drawable/search_icon" />
 
+                            <!-- Filtros rápidos de la lista de capítulos + número de capítulos (app oficial) -->
+                            <LinearLayout
+                                android:id="@+id/chapter_filter_bar"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal"
+                                android:paddingHorizontal="10dp">
+
+                                <HorizontalScrollView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:scrollbars="none">
+
+                                    <com.google.android.material.chip.ChipGroup
+                                        android:id="@+id/chapter_filter_chip_group"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        app:selectionRequired="true"
+                                        app:singleLine="true"
+                                        app:singleSelection="true">
+
+                                        <com.google.android.material.chip.Chip
+                                            android:id="@+id/chapter_filter_chip_all"
+                                            style="@style/ChipFilled"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:checkable="true"
+                                            android:text="@string/chapter_filter_all" />
+
+                                        <com.google.android.material.chip.Chip
+                                            android:id="@+id/chapter_filter_chip_downloaded"
+                                            style="@style/ChipFilled"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:checkable="true"
+                                            android:text="@string/chapter_filter_downloaded" />
+
+                                        <com.google.android.material.chip.Chip
+                                            android:id="@+id/chapter_filter_chip_read"
+                                            style="@style/ChipFilled"
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:checkable="true"
+                                            android:text="@string/chapter_filter_read" />
+                                    </com.google.android.material.chip.ChipGroup>
+                                </HorizontalScrollView>
+
+                                <TextView
+                                    android:id="@+id/chapter_count_text"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="8dp"
+                                    android:textColor="?attr/grayTextColor"
+                                    android:textSize="14sp"
+                                    tools:text="6135 Capítulos" />
+                            </LinearLayout>
+
                             <androidx.recyclerview.widget.RecyclerView
                                 android:id="@+id/chapter_list"
 
@@ -938,6 +997,78 @@ Translator: Rainbow Turtle" />
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>
+
+    <!-- Barra de selección múltiple de capítulos (app oficial): Selected N + cerrar,
+         seleccionar todo, marcar como leídos y descargar -->
+    <LinearLayout
+        android:id="@+id/chapter_select_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginHorizontal="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/chapter_select_bar_background"
+        android:elevation="8dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="6dp"
+        android:visibility="gone"
+        tools:visibility="gone">
+
+        <TextView
+            android:id="@+id/chapter_selected_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="4dp"
+            android:textColor="?attr/textColor"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            tools:text="Selected 1" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/chapter_select_close"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/chapter_select_close"
+                android:src="@drawable/close_24px"
+                app:tint="?attr/textColor" />
+
+            <ImageButton
+                android:id="@+id/chapter_select_select_all"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/chapter_select_all"
+                android:src="@drawable/ic_baseline_check_box_24"
+                app:tint="?attr/textColor" />
+
+            <ImageButton
+                android:id="@+id/chapter_select_read"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/chapter_select_read"
+                android:src="@drawable/ic_baseline_check_24"
+                app:tint="?attr/textColor" />
+
+            <ImageButton
+                android:id="@+id/chapter_select_download"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/chapter_select_download"
+                android:src="@drawable/ic_baseline_get_app_24"
+                app:tint="?attr/textColor" />
+        </LinearLayout>
+    </LinearLayout>
 
     <ImageView
         android:id="@+id/result_back"

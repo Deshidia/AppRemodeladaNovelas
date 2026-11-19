@@ -1,16 +1,22 @@
 package com.lagradost.quicknovel
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AlertDialog
+import androidx.core.animation.doOnEnd
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.view.ViewGroup
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.databinding.DialogUntranslatedTermBinding
@@ -24,6 +30,7 @@ import com.lagradost.quicknovel.util.ReplaceTiming
 import com.lagradost.quicknovel.util.TextReplacement
 import com.lagradost.quicknovel.util.TextReplacements
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
+import com.lagradost.quicknovel.util.UIHelper.hideKeyboard
 import com.lagradost.quicknovel.util.UntranslatedTerms
 import com.lagradost.quicknovel.util.mergeReplacementRules
 import com.lagradost.quicknovel.util.toPx
@@ -41,8 +48,13 @@ import kotlin.math.min
  * escribir y saltar entre coincidencias con las flechas; todas quedan subrayadas en el texto
  * (cian, distinto del marcador del usuario) y la que se visita lleva tinte. Al navegar, el
  * panel se cierra y una píldora flotante permite seguir avanzando mientras se lee.
- * Abajo del panel, donde estaba el botón, va integrada la propia ventana de Sustituir: el mismo
- * editor de reglas de los ajustes del lector. Sus cambios se reaplican al capítulo en caliente.
+ *
+ * Abajo del panel, donde estaba el botón, va plegada la propia ventana de Sustituir: una barra
+ * fina que solo muestra «Sustituciones de: …» (así la lista de términos queda lo más alta
+ * posible). Al tocarla, o deslizar hacia arriba como quien baja el scroll, el editor de reglas
+ * de los ajustes del lector se despliega a pantalla completa con una transición suave y se
+ * pliega de vuelta con el botón atrás, deslizando hacia abajo o con la flecha de la cabecera.
+ * Sus cambios se reaplican al capítulo en caliente.
  */
 class UntranslatedTermsDrawer(
     private val activity: ReadActivity2,
@@ -162,6 +174,18 @@ class UntranslatedTermsDrawer(
     /** Ventana de Sustituir integrada abajo del panel (null hasta que el libro tiene título). */
     private var replaceTab: ReadReplaceTab? = null
 
+    /** Animación de despliegue/plegado del editor a pantalla completa (null = parado). */
+    private var replaceAnim: ValueAnimator? = null
+
+    // gesto en la barra plegada: deslizar hacia arriba (como quien baja el scroll) despliega;
+    // el toque simple también despliega (OnClickListener)
+    private var barTouchY = 0f
+    private var barExpandFired = false
+
+    // gesto en la cabecera a pantalla completa: deslizar hacia abajo pliega de vuelta
+    private var headerTouchY = 0f
+    private var headerCollapseFired = false
+
     fun setup() {
         binding.apply {
             untranslatedList.layoutManager = LinearLayoutManager(activity)
@@ -186,6 +210,54 @@ class UntranslatedTermsDrawer(
             untranslatedSearchPillClose.setOnClickListener {
                 untranslatedSearchPill.isVisible = false
             }
+
+            // barra plegada de Sustituir: toque o deslizamiento hacia arriba = pantalla completa
+            untranslatedReplaceBar.setOnClickListener { expandReplace() }
+            untranslatedReplaceBar.setOnTouchListener { _, ev ->
+                when (ev.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        barTouchY = ev.rawY
+                        barExpandFired = false
+                        false
+                    }
+
+                    MotionEvent.ACTION_MOVE -> {
+                        if (!barExpandFired && barTouchY - ev.rawY >
+                            ViewConfiguration.get(activity).scaledTouchSlop * 2f
+                        ) {
+                            barExpandFired = true
+                            expandReplace()
+                        }
+                        barExpandFired
+                    }
+
+                    else -> barExpandFired
+                }
+            }
+
+            // cabecera a pantalla completa: toque en la flecha o deslizamiento hacia abajo = plegar
+            untranslatedReplaceCollapse.setOnClickListener { collapseReplace() }
+            untranslatedReplaceFullHeader.setOnTouchListener { _, ev ->
+                when (ev.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        headerTouchY = ev.rawY
+                        headerCollapseFired = false
+                        false
+                    }
+
+                    MotionEvent.ACTION_MOVE -> {
+                        if (!headerCollapseFired && ev.rawY - headerTouchY >
+                            ViewConfiguration.get(activity).scaledTouchSlop * 2f
+                        ) {
+                            headerCollapseFired = true
+                            collapseReplace()
+                        }
+                        headerCollapseFired
+                    }
+
+                    else -> headerCollapseFired
+                }
+            }
         }
     }
 
@@ -202,7 +274,7 @@ class UntranslatedTermsDrawer(
         // la ventana de Sustituir integrada se monta en cuanto el libro tiene título; sin clave
         // para las sustituciones no se muestra (no habría dónde guardar las reglas)
         if (replaceTab == null) setupReplaceEditor()
-        binding.untranslatedReplaceScroll.isVisible = replaceTab != null
+        binding.untranslatedReplaceBar.isVisible = replaceTab != null
 
         // la píldora sobra con el panel abierto; se restaura la última búsqueda
         binding.untranslatedSearchPill.isVisible = false
@@ -247,6 +319,12 @@ class UntranslatedTermsDrawer(
         isOpen = false
         onStateChanged?.invoke(false)
 
+        // el editor desplegado no puede quedarse flotando sin el panel
+        if (binding.untranslatedReplaceFull.isVisible || replaceAnim != null) {
+            replaceAnim = null
+            hideReplaceOverlay()
+        }
+
         // al cerrar se quita el foco y el teclado: que no persista sobre el texto
         binding.untranslatedSearchInput.clearFocus()
         (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
@@ -262,10 +340,11 @@ class UntranslatedTermsDrawer(
     }
 
     /**
-     * Pega la ventana de Sustituir al final del panel, donde estaba el botón: se infla el layout
-     * de los ajustes del lector, se despega solo su bloque de sustituciones y se añade al scroll
-     * del panel. Cada cambio en el editor reaplica las reglas al capítulo (mismo debounce que
-     * al aceptar un término del panel).
+     * Pega la ventana de Sustituir a la capa a pantalla completa del layout raíz: se infla el
+     * layout de los ajustes del lector, se despega solo su bloque de sustituciones y se añade
+     * al host de la capa. Mientras está plegada, la capa no se ve y el panel solo muestra la
+     * barra con el título. Cada cambio en el editor reaplica las reglas al capítulo (mismo
+     * debounce que al aceptar un término del panel).
      */
     private fun setupReplaceEditor() {
         val novelName = viewModel.replacementsNovelName() ?: return
@@ -275,17 +354,131 @@ class UntranslatedTermsDrawer(
         val container = settingsBinding.tabReplaceContainer
         (container.parent as? ViewGroup)?.removeView(container)
         container.isVisible = true
-        binding.untranslatedReplaceHost.addView(
+        // el título del editor ya lo pintan la barra del panel y la cabecera de la capa
+        settingsBinding.readReplaceNovel.isVisible = false
+        binding.untranslatedReplaceFullHost.addView(
             container,
             ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
+        val title = activity.getString(R.string.replace_reader_novel, novelName)
+        binding.untranslatedReplaceBarTitle.text = title
+        binding.untranslatedReplaceFullTitle.text = title
 
         replaceTab = ReadReplaceTab(activity, settingsBinding, novelName) {
             scheduleApply()
         }.apply { setup() }
+    }
+
+    /**
+     * Despliega Sustituir a pantalla completa con una transición suave: la capa nace con el
+     * tamaño y la esquina de la barra del panel (abajo a la derecha) y crece hasta cubrir
+     * todo, como una hoja que se abre hacia arriba.
+     */
+    private fun expandReplace() {
+        val overlay = binding.untranslatedReplaceFull
+        // con el panel ya cerrándose no se despliega: se quedaría flotando sin el panel
+        if (replaceTab == null || !isOpen || replaceAnim != null || overlay.isVisible) return
+        val root = overlay.parent as ViewGroup
+
+        // punto de partida: la barra del panel (mismo ancho que el panel, mismo alto que la barra)
+        val barHeight = binding.untranslatedReplaceBar.height.takeIf { it > 0 } ?: 40.toPx
+        val drawerWidth = binding.untranslatedDrawer.width.takeIf { it > 0 }
+            ?: min(320.toPx, (activity.resources.displayMetrics.widthPixels * 0.85f).toInt())
+        val fullWidth = root.width
+        val fullHeight = root.height
+        if (fullWidth <= 0 || fullHeight <= 0) return
+
+        overlay.layoutParams = (overlay.layoutParams as FrameLayout.LayoutParams).apply {
+            width = drawerWidth
+            height = barHeight
+            gravity = Gravity.BOTTOM or Gravity.END
+        }
+        overlay.isVisible = true
+
+        replaceAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 280L
+            interpolator = DecelerateInterpolator(1.5f)
+            addUpdateListener { animator ->
+                if (animator !== replaceAnim) return@addUpdateListener
+                val t = animator.animatedValue as Float
+                overlay.layoutParams =
+                    (overlay.layoutParams as FrameLayout.LayoutParams).apply {
+                        width = (drawerWidth + (fullWidth - drawerWidth) * t).toInt()
+                        height = (barHeight + (fullHeight - barHeight) * t).toInt()
+                    }
+            }
+            doOnEnd {
+                if (it !== replaceAnim) return@doOnEnd
+                replaceAnim = null
+                overlay.layoutParams =
+                    (overlay.layoutParams as FrameLayout.LayoutParams).apply {
+                        width = ViewGroup.LayoutParams.MATCH_PARENT
+                        height = ViewGroup.LayoutParams.MATCH_PARENT
+                    }
+            }
+            start()
+        }
+    }
+
+    /**
+     * Plega el editor de vuelta a la barra del panel, con la animación inversa (o sin ella si
+     * venía a medio camino). Devuelve true si la capa estaba abierta: el botón atrás la usa
+     * para plegar el editor antes de cerrar el panel.
+     */
+    fun collapseReplace(): Boolean {
+        val overlay = binding.untranslatedReplaceFull
+        val midAnimation = replaceAnim != null
+        if (!midAnimation && !overlay.isVisible) return false
+
+        val barHeight = binding.untranslatedReplaceBar.height.takeIf { it > 0 } ?: 40.toPx
+        val drawerWidth = binding.untranslatedDrawer.width.takeIf { it > 0 }
+            ?: min(320.toPx, (activity.resources.displayMetrics.widthPixels * 0.85f).toInt())
+        if (midAnimation || barHeight <= 0 || overlay.height <= 0 || overlay.width <= 0) {
+            // sin condiciones para animar: plegado seco, sin saltos raros a medio camino
+            replaceAnim = null
+            hideReplaceOverlay()
+            return true
+        }
+
+        val startWidth = overlay.width
+        val startHeight = overlay.height
+        replaceAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 240L
+            interpolator = DecelerateInterpolator(1.5f)
+            addUpdateListener { animator ->
+                if (animator !== replaceAnim) return@addUpdateListener
+                val t = animator.animatedValue as Float
+                overlay.layoutParams =
+                    (overlay.layoutParams as FrameLayout.LayoutParams).apply {
+                        width = (startWidth + (drawerWidth - startWidth) * t).toInt()
+                        height = (startHeight + (barHeight - startHeight) * t).toInt()
+                    }
+            }
+            doOnEnd {
+                if (it !== replaceAnim) return@doOnEnd
+                hideReplaceOverlay()
+            }
+            start()
+        }
+        return true
+    }
+
+    /** Oculta la capa a pantalla completa y deja su tamaño listo para el próximo despliegue. */
+    private fun hideReplaceOverlay() {
+        replaceAnim = null
+        val overlay = binding.untranslatedReplaceFull
+        if (overlay.isVisible) {
+            overlay.isVisible = false
+            // el teclado se va con el editor: que no quede flotando sobre el texto
+            hideKeyboard(binding.untranslatedReplaceBar)
+        }
+        overlay.layoutParams = (overlay.layoutParams as FrameLayout.LayoutParams).apply {
+            width = ViewGroup.LayoutParams.MATCH_PARENT
+            height = ViewGroup.LayoutParams.MATCH_PARENT
+        }
     }
 
     private fun currentSubtitle(): String {
@@ -300,12 +493,6 @@ class UntranslatedTermsDrawer(
     }
 
     private fun showPanel() {
-        // la ventana de Sustituir integrada no roba más de media pantalla: si el contenido es
-        // más alto, scrollea dentro de sí misma; la lista de términos siempre manda
-        binding.untranslatedReplaceScroll.layoutParams?.height =
-            min((activity.resources.displayMetrics.heightPixels * 0.5f).toInt(), 320.toPx)
-        binding.untranslatedReplaceScroll.requestLayout()
-
         // ancho: 320dp como máximo, sin salirse de la pantalla
         val width = min(320.toPx, (activity.resources.displayMetrics.widthPixels * 0.85f).toInt())
         binding.untranslatedDrawer.layoutParams =

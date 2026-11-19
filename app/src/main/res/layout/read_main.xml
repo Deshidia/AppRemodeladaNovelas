@@ -621,24 +621,52 @@
                     app:tint="?attr/textColor" />
             </LinearLayout>
 
-            <!-- Ventana de Sustituir integrada abajo del panel: reglas y formulario a la vista,
-                 sin botón intermedio. El contenido (del layout de ajustes del lector) se pega
-                 aquí desde el código y el alto real se fija al abrir el panel. -->
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/untranslated_replace_scroll"
+            <!-- Sustituir, plegado en la parte baja del panel: solo la altura justa para el
+                 título, así la lista de términos queda lo más alta posible. Al tocar la barra
+                 o deslizar hacia arriba (como al bajar el scroll) el editor se despliega a
+                 pantalla completa: la vista completa vive al final del layout raíz y su alto
+                 y ancho se animan desde el código partiendo de esta barra. -->
+            <LinearLayout
+                android:id="@+id/untranslated_replace_bar"
                 android:layout_width="match_parent"
-                android:layout_height="320dp"
+                android:layout_height="wrap_content"
                 android:background="?attr/primaryBlackBackground"
-                android:fillViewport="true"
-                android:visibility="gone"
-                tools:visibility="visible">
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="10dp">
 
-                <LinearLayout
-                    android:id="@+id/untranslated_replace_host"
-                    android:layout_width="match_parent"
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_baseline_edit_24"
+                    app:tint="?attr/grayTextColor" />
+
+                <TextView
+                    android:id="@+id/untranslated_replace_bar_title"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical" />
-            </androidx.core.widget.NestedScrollView>
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="?attr/textColor"
+                    android:textSize="13sp"
+                    tools:text="Sustituciones de: Mi novela" />
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginStart="8dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_baseline_arrow_upward_24"
+                    app:tint="?attr/textColor" />
+            </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 
@@ -696,5 +724,70 @@
             android:scaleType="fitCenter"
             android:src="@drawable/close_24px"
             app:tint="?attr/textColor" />
+    </LinearLayout>
+
+    <!-- Sustituir a pantalla completa: nace de la barra del panel (mismo ancho y alto) y se
+         despliega hacia arriba con una animación de alto y ancho desde el código. El editor
+         en sí (del layout de ajustes del lector) se pega aquí desde el código. -->
+    <LinearLayout
+        android:id="@+id/untranslated_replace_full"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="bottom"
+        android:background="?attr/primaryGrayBackground"
+        android:clickable="true"
+        android:elevation="20dp"
+        android:focusable="true"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/untranslated_replace_full_header"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="?attr/primaryBlackBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="4dp"
+            android:paddingEnd="8dp">
+
+            <ImageButton
+                android:id="@+id/untranslated_replace_collapse"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/untranslated_close"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_baseline_arrow_downward_24"
+                app:tint="?attr/textColor" />
+
+            <TextView
+                android:id="@+id/untranslated_replace_full_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?attr/textColor"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                tools:text="Sustituciones de: Mi novela" />
+        </LinearLayout>
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/untranslated_replace_full_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:id="@+id/untranslated_replace_full_host"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </androidx.core.widget.NestedScrollView>
     </LinearLayout>
 </FrameLayout>

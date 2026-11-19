@@ -22,6 +22,8 @@ import com.lagradost.quicknovel.RESULT_BOOKMARK
 import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.search.SearchFragment
 import com.lagradost.quicknovel.util.ResultCached
+import com.lagradost.quicknovel.util.TextReplacements
+import com.lagradost.quicknovel.util.mergeReplacementRules
 
 /**
  * La novela "de origen" cuando se busca la misma obra en otros proveedores (pulsación larga en el
@@ -103,9 +105,10 @@ object NovelMigration {
      * novela de lista.
      *
      * Se copia el capítulo por el que ibas (índice y nombre: el lector busca primero por nombre y
-     * cae al índice, así que en un proveedor con otra numeración encuentra el mismo capítulo) y
-     * las marcas de "capítulo leído". No se copia la posición dentro del capítulo: el texto de
-     * otro proveedor no es idéntico, así que se retoma al principio del capítulo.
+     * cae al índice, así que en un proveedor con otra numeración encuentra el mismo capítulo),
+     * las marcas de "capítulo leído" y las reglas "Sustituir" (escritas a mano por el usuario:
+     * perderlas haría inútil la migración). No se copia la posición dentro del capítulo: el texto
+     * de otro proveedor no es idéntico, así que se retoma al principio del capítulo.
      *
      * No borra nada de la novela de origen.
      */
@@ -129,6 +132,15 @@ object NovelMigration {
         }
 
         copyReadMarks(fromName, toName)
+
+        // Reglas "Sustituir": se mezclan con las que ya tuviera el destino, sin duplicar.
+        val rules = TextReplacements.get(fromName)
+        if (rules.isNotEmpty()) {
+            val merged = mergeReplacementRules(TextReplacements.get(toName), rules)
+            if (merged.changed) {
+                TextReplacements.set(toName, merged.rules)
+            }
+        }
     }
 
     private fun copyReadMarks(fromName: String, toName: String) {

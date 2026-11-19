@@ -13,6 +13,20 @@
 
     <string name="search_hint">Search Novels…</string>
     <string name="search_chapters">Search Chapters…</string>
+    <!-- Chapter list quick filters and multi-selection (like the official app) -->
+    <string name="chapter_filter_all">All</string>
+    <string name="chapter_filter_downloaded">Downloaded</string>
+    <string name="chapter_filter_read">Read</string>
+    <string name="chapter_count_formatted" formatted="true">%d Chapters</string>
+    <string name="chapters_selected_formatted" formatted="true">%d Selected</string>
+    <string name="chapter_select_close">Close selection</string>
+    <string name="chapter_select_all">Select all</string>
+    <string name="chapter_select_read">Mark selected as read</string>
+    <string name="chapter_select_download">Download selected</string>
+    <string name="selected_chapters_downloading">Downloading selected chapters</string>
+    <string name="selected_chapters_marked_read">Chapters marked as read</string>
+    <string name="download_already_running">A download is already running for this novel</string>
+    <string name="no_chapters_selected">No chapters selected</string>
     <string name="synopsis">Synopsis</string>
     <string name="no_data">No Data</string>
     <string name="no_author">Author not found</string>

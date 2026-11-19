@@ -29,6 +29,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.preference.PreferenceManager
@@ -48,9 +49,12 @@ import com.lagradost.quicknovel.BookDownloader2.LOCAL_EPUB_MIN_SIZE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
 import com.lagradost.quicknovel.BookDownloader2Helper.createQuickStream
+import com.lagradost.quicknovel.DataStore.getFolderName
+import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.providers.WebLinkProvider
 import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.LibraryMembership
+import com.lagradost.quicknovel.ui.result.remapReadMarks
 import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.BookDownloader2Helper.getDirectory
 import com.lagradost.quicknovel.CommonActivity.activity
@@ -73,6 +77,7 @@ import com.lagradost.quicknovel.util.DownloadTranslation
 import com.lagradost.quicknovel.util.DownloadTranslator
 import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.ResultCached
+import com.lagradost.quicknovel.util.TextReplacements
 import com.lagradost.quicknovel.util.TranslationNotAppliedException
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.pmap
@@ -1495,6 +1500,53 @@ object BookDownloader2 {
             EPUB_CURRENT_POSITION_SCROLL_CHAR, newName,
             getKey<Int>(EPUB_CURRENT_POSITION_SCROLL_CHAR, oldName)
         )
+
+        // El resto del estado de la novela también está indexado por su NOMBRE, y sin esta
+        // migración se quedaría huérfano: el usuario vería "Sustituir" vacío, el subrayado
+        // desaparecido y los ajustes de traducción a cero aunque el progreso sí se moviera.
+        // Solo si el nombre cambia de verdad: con oldName == newName estas líneas borrarían
+        // justo lo que acaban de copiar.
+        if (oldName != newName) {
+            // Reglas "Sustituir" (se mueven: dejarlas en el nombre viejo las duplicaría en el
+            // selector de "copiar desde otras novelas" porque es por nombre, no por id)
+            val rules = TextReplacements.get(oldName)
+            if (rules.isNotEmpty()) {
+                TextReplacements.set(newName, rules)
+            }
+            removeKey(NOVEL_TEXT_REPLACEMENTS, oldName)
+
+            // Subrayado del usuario
+            getKey<ReaderMark>(EPUB_USER_MARK, oldName)?.let { mark ->
+                setKey(EPUB_USER_MARK, newName, mark)
+            }
+            removeKey(EPUB_USER_MARK, oldName)
+
+            // Ajustes de traducción por novela
+            getKey<ReadActivityViewModel.MLSettings>(EPUB_CURRENT_ML, oldName)?.let { settings ->
+                setKey(EPUB_CURRENT_ML, newName, settings)
+            }
+            removeKey(EPUB_CURRENT_ML, oldName)
+
+            // Marcas de "capítulo leído": claves "<carpeta>/<nombre>/<índice>"
+            context?.getSharedPrefs()?.let { prefs ->
+                val fromPrefix = getFolderName(EPUB_CURRENT_POSITION_READ_AT, "$oldName/")
+                val toPrefix = getFolderName(EPUB_CURRENT_POSITION_READ_AT, "$newName/")
+                val copies = remapReadMarks(prefs.all, fromPrefix, toPrefix)
+                val oldKeys = prefs.all.keys.filter {
+                    it.startsWith(fromPrefix) && !it.startsWith(toPrefix)
+                }
+                if (copies.isNotEmpty() || oldKeys.isNotEmpty()) {
+                    prefs.edit {
+                        for ((key, value) in copies) {
+                            putString(key, value)
+                        }
+                        for (key in oldKeys) {
+                            remove(key)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private val migrationNovelMutex = Mutex()
@@ -2636,6 +2688,155 @@ object BookDownloader2 {
             if (translatedTotal > 0) {
                 removeKey(DOWNLOAD_EPUB_SIZE, id.toString())
             }
+            currentDownloadsMutex.withLock {
+                currentDownloads -= id
+            }
+        }
+    }
+
+    /**
+     * Descarga solo los capítulos seleccionados [chapters] (índices) de una novela por capítulos.
+     * Nueva función de la lista de capítulos de la app oficial: selección múltiple no contigua.
+     * No descarga de nuevo los capítulos que ya están en disco (igual que la descarga normal).
+     */
+    @WorkerThread
+    suspend fun downloadChaptersThread(
+        load: StreamResponse,
+        api: APIRepository,
+        chapters: Collection<Int>,
+    ) {
+        val context = activity ?: return
+        val sorted = chapters.filter { it in load.data.indices }.distinct().sorted()
+        if (sorted.isEmpty()) return
+
+        val id = generateId(load, api.name)
+        val filesDir = context.filesDir
+        val sApiName = BookDownloader2Helper.sanitizeFilename(api.name)
+        val sAuthor =
+            BookDownloader2Helper.sanitizeFilename(load.author ?: "")
+        val sName = BookDownloader2Helper.sanitizeFilename(load.name)
+
+        // solo 1 descarga a la vez por novela (igual que downloadWorkThread)
+        currentDownloadsMutex.withLock {
+            if (currentDownloads.contains(id)) {
+                return
+            }
+        }
+
+        var downloadedTotal = 0L // how many successful get requests
+
+        try {
+            // los capítulos que ya estaban descargados cuentan como descargados de antes
+            val alreadyDownloaded =
+                BookDownloader2Helper.downloadInfo(
+                    context,
+                    load.author,
+                    load.name,
+                    api.name
+                )?.downloaded ?: 0L
+
+            // crea el estado IsPending (y evita duplicados con currentDownloads)
+            setPrefixData(load, api.name, load.data.size.toLong(), alreadyDownloaded)
+
+            var currentState = DownloadState.IsDownloading
+            changeDownload(id) {
+                state = currentState
+            }?.let { progressState ->
+                createNotification(id, load, progressState)
+            }
+
+            for (index in sorted) {
+                // consume any action and wait until not paused (igual que downloadWorkThread)
+                while (true) {
+                    when (consumeAction(id)) {
+                        DownloadActionType.Pause -> {
+                            DownloadState.IsPaused
+                        }
+
+                        DownloadActionType.Resume -> DownloadState.IsDownloading
+                        DownloadActionType.Stop -> DownloadState.IsStopped
+                        else -> null
+                    }?.let { newState ->
+                        changeDownload(id) {
+                            state = newState
+                        }?.let { progressState ->
+                            createNotification(id, load, progressState)
+                        }
+                        currentState = newState
+                    }
+                    if (currentState != DownloadState.IsPaused) {
+                        break
+                    }
+                    delay(200)
+                }
+
+                // el usuario paró la descarga de la novela mientras seleccionaba
+                if (currentState == DownloadState.IsStopped) {
+                    return
+                }
+
+                val filepath =
+                    filesDir.toString() + BookDownloader2Helper.getFilename(
+                        sApiName,
+                        sAuthor,
+                        sName,
+                        index
+                    )
+                val data = load.data.getOrNull(index) ?: continue
+                val hasDownloadedChapter = BookDownloader2Helper.downloadIndividualChapter(
+                    filepath, api, data
+                )
+
+                if (hasDownloadedChapter) {
+                    downloadedTotal += 1
+                    changeDownload(id) {
+                        progress = (index + 1).toLong()
+                        downloaded = alreadyDownloaded + downloadedTotal
+                        state = DownloadState.IsDownloading
+                    }?.let { progressState ->
+                        createNotification(id, load, progressState)
+                    }
+                } else {
+                    changeDownload(id) {
+                        progress = (index + 1).toLong()
+                        downloaded = alreadyDownloaded + downloadedTotal
+                        state = DownloadState.IsFailed
+                    }?.let { progressState ->
+                        createNotification(id, load, progressState)
+                    }
+                    return
+                }
+            }
+
+            // finally call it before changeDownload
+            if (downloadedTotal > 0) {
+                setSuffixData(load, api.name)
+            }
+
+            // recalcula el progreso real desde disco para que Descargas y el filtro
+            // "Descargado" queden consistentes con las descargas individuales
+            val info =
+                BookDownloader2Helper.downloadInfo(context, load.author, load.name, api.name)
+            changeDownload(id) {
+                state = DownloadState.IsDone
+                if (info != null) {
+                    progress = info.progress
+                    downloaded = info.downloaded
+                    total = info.total
+                }
+            }?.let { progressState ->
+                if (downloadedTotal > 0) {
+                    createNotification(id, load, progressState)
+                }
+            }
+        } catch (t: Throwable) {
+            // also set it here in case of exception
+            logError(t)
+            changeDownload(id) { state = DownloadState.IsFailed }
+            if (downloadedTotal > 0) {
+                setSuffixData(load, api.name)
+            }
+        } finally {
             currentDownloadsMutex.withLock {
                 currentDownloads -= id
             }

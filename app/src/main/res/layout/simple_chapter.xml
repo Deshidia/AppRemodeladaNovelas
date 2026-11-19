@@ -11,32 +11,52 @@
 
     <LinearLayout
             android:layout_gravity="center"
-            android:gravity="center"
-            android:padding="5dp"
-            android:orientation="vertical"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:layout_width="match_parent"
             android:layout_height="match_parent">
 
-        <TextView
-                android:ellipsize="marquee"
-                android:singleLine="true"
-                tools:textSize="16sp"
-                tools:textColor="?attr/textColor"
-                android:layout_gravity="center"
-                tools:text="Chapter 1"
-                android:id="@+id/name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+        <LinearLayout
+                android:layout_weight="1"
+                android:layout_width="0dp"
+                android:gravity="center"
+                android:paddingStart="5dp"
+                android:paddingEnd="5dp"
+                android:orientation="vertical"
+                android:layout_height="match_parent">
 
-        <TextView
-                tools:textSize="14sp"
-                tools:textColor="?attr/grayTextColor"
-                android:layout_gravity="center"
-                tools:text="Released 10h ago"
-                android:id="@+id/release_date"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+            <TextView
+                    android:ellipsize="marquee"
+                    android:singleLine="true"
+                    tools:textSize="16sp"
+                    tools:textColor="?attr/textColor"
+                    android:layout_gravity="center"
+                    tools:text="Chapter 1"
+                    android:id="@+id/name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
 
-        </TextView>
+            <TextView
+                    tools:textSize="14sp"
+                    tools:textColor="?attr/grayTextColor"
+                    android:layout_gravity="center"
+                    tools:text="Released 10h ago"
+                    android:id="@+id/release_date"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+            </TextView>
+        </LinearLayout>
+
+        <!-- Descargar capítulo (app oficial): abre la selección múltiple con este capítulo -->
+        <ImageView
+                android:id="@+id/download_chapter"
+                android:layout_width="44dp"
+                android:layout_height="match_parent"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/download"
+                android:padding="10dp"
+                android:src="@drawable/ic_baseline_get_app_24"
+                app:tint="?attr/textColor" />
     </LinearLayout>
 </androidx.cardview.widget.CardView>

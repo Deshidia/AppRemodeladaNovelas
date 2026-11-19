@@ -36,6 +36,9 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
         // Motor de la descarga con traducción (DownloadTranslation.tag); sin él la descarga es normal
         const val TRANSLATION = "translation"
 
+        // Índices de capítulos seleccionados en la lista de capítulos (descarga individual)
+        const val CHAPTERS = "chapters"
+
         const val ID_REFRESH_DOWNLOADS = "REFRESH_DOWNLOADS"
         const val ID_REFRESH_READINGPROGRESS = "REFRESH_READINGPROGRESS"
         const val ID_DOWNLOAD = "ID_DOWNLOAD"
@@ -116,7 +119,8 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
             data: Any,
             downloadId: Int,
             context: Context,
-            translation: DownloadTranslation? = null
+            translation: DownloadTranslation? = null,
+            chapters: List<Int>? = null
         ) {
             getWorkerManager(context).enqueueUniqueWork(
                 ID_DOWNLOAD + downloadId, // Solo 1 descarga por worker: evita duplicar la misma novela
@@ -129,6 +133,7 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
                             .putInt(DOWNLOAD_ID, downloadId)
                             .apply {
                                 if (translation != null) putString(TRANSLATION, translation.tag)
+                                if (chapters != null) putIntArray(CHAPTERS, chapters.toIntArray())
                             }
                             .build()
                     )
@@ -152,6 +157,26 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
                 return
             }
             startDownload(load, generateId(load, load.apiName), context, translation)
+        }
+
+        /**
+         * Descarga solo los capítulos seleccionados de la lista de capítulos (app oficial).
+         */
+        fun downloadChapters(
+            load: StreamResponse,
+            context: Context,
+            chapters: List<Int>
+        ) {
+            if (chapters.isEmpty()) return
+            if(load.apiName == IMPORT_SOURCE || load.apiName == IMPORT_SOURCE_PDF) {
+                return
+            }
+            startDownload(
+                load,
+                generateId(load, load.apiName),
+                context,
+                chapters = chapters
+            )
         }
     }
 
@@ -186,13 +211,23 @@ class DownloadFileWorkManager(val context: Context, private val workerParams: Wo
                 runInForeground()
                 when (val data = popWork(this.workerParams.inputData.getInt(DATA, -1))) {
                     is StreamResponse -> {
-                        BookDownloader2.downloadWorkThread(
-                            data,
-                            Apis.getApiFromName(data.apiName),
-                            DownloadTranslation.fromTag(
-                                this.workerParams.inputData.getString(TRANSLATION)
+                        // descarga de la selección múltiple de la lista de capítulos
+                        val chapters = this.workerParams.inputData.getIntArray(CHAPTERS)?.toList()
+                        if (chapters != null && chapters.isNotEmpty()) {
+                            BookDownloader2.downloadChaptersThread(
+                                data,
+                                Apis.getApiFromName(data.apiName),
+                                chapters
                             )
-                        )
+                        } else {
+                            BookDownloader2.downloadWorkThread(
+                                data,
+                                Apis.getApiFromName(data.apiName),
+                                DownloadTranslation.fromTag(
+                                    this.workerParams.inputData.getString(TRANSLATION)
+                                )
+                            )
+                        }
                     }
 
                     is EpubResponse -> {

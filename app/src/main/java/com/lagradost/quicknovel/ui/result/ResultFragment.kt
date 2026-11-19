@@ -370,6 +370,21 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
     }
 
+    /**
+     * Muestra u oculta la barra de selección múltiple ("Selected N") y ajusta el FAB
+     * de filtros, como en la app oficial.
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    private fun updateChapterSelectionUi(
+        binding: FragmentResultBinding,
+        selecting: Boolean
+    ) {
+        binding.chapterSelectBar.isVisible = selecting
+        binding.chaptersFab.isVisible =
+            !selecting && viewModel.currentTabIndex.value == 3
+        (binding.chapterList.adapter as? ChapterAdapter)?.notifyDataSetChanged()
+    }
+
     private fun updateScrollHeight() {
         val binding = binding ?: return
         val displayMetrics = context?.resources?.displayMetrics ?: return
@@ -385,7 +400,7 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         }
         val parameter = binding.chapterList.layoutParams
         parameter.height =
-            displayMetrics.heightPixels - binding.viewsAndRating.height - binding.resultTabs.height - binding.resultScrollPadding.paddingTop
+            displayMetrics.heightPixels - binding.viewsAndRating.height - binding.resultTabs.height - binding.resultScrollPadding.paddingTop - binding.chapterFilterBar.height
 
         binding.chapterList.layoutParams = parameter
         //ViewGroup.LayoutParams(binding.chapterList.layoutParams.width,displayMetrics.heightPixels)
@@ -605,6 +620,9 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                         resultChapters.text = res.data.size.toString()
                         resultChaptersInfo.text =
                             if (res.data.size == 1) getString(R.string.chapter) else getString(R.string.chapters)
+                        // contador de capítulos de la lista de capítulos (app oficial)
+                        chapterCountText.text =
+                            getString(R.string.chapter_count_formatted).format(res.data.size)
                         resultQuickstream.isVisible = true
                         resultTotalChapters.isVisible = true
                         if (res.data.isNotEmpty()) {
@@ -965,10 +983,14 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 // hiddenView.isGone = 0 == pos
                 resultReviewsholder.isVisible = 1 == pos
                 reviewsFab.isVisible = 1 == pos
-                chaptersFab.isVisible = 3 == pos
+                chaptersFab.isVisible = 3 == pos && !viewModel.isSelectingChapters()
                 resultRelatedholder.isVisible = 2 == pos
                 resultChapterholder.isVisible = 3 == pos
                 resultReplaceHolder.isVisible = TAB_REPLACE == pos
+            }
+            // al salir de la pestaña de capítulos se cierra la selección múltiple
+            if (pos != 3 && viewModel.isSelectingChapters()) {
+                viewModel.exitChapterSelectionMode()
             }
         }
 
@@ -1031,6 +1053,52 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 return true
             }
         })
+
+        // ==== Filtros rápidos de capítulos (Todos / Descargado / Has leído), app oficial ====
+        binding.chapterFilterChipAll.isChecked =
+            ResultViewModel.chapterQuickFilter == ResultViewModel.CHAPTER_QUICK_FILTER_ALL
+        binding.chapterFilterChipDownloaded.isChecked =
+            ResultViewModel.chapterQuickFilter == ResultViewModel.CHAPTER_QUICK_FILTER_DOWNLOADED
+        binding.chapterFilterChipRead.isChecked =
+            ResultViewModel.chapterQuickFilter == ResultViewModel.CHAPTER_QUICK_FILTER_READ
+        binding.chapterFilterChipGroup.setOnCheckedStateChangeListener { _, checkedIds ->
+            ResultViewModel.chapterQuickFilter = when (checkedIds.firstOrNull()) {
+                R.id.chapter_filter_chip_downloaded -> ResultViewModel.CHAPTER_QUICK_FILTER_DOWNLOADED
+                R.id.chapter_filter_chip_read -> ResultViewModel.CHAPTER_QUICK_FILTER_READ
+                else -> ResultViewModel.CHAPTER_QUICK_FILTER_ALL
+            }
+            viewModel.reorderChapters()
+        }
+
+        // ==== Selección múltiple de capítulos (app oficial) ====
+        observe(viewModel.chapterSelectionMode) { selecting ->
+            updateChapterSelectionUi(binding, selecting)
+        }
+
+        observe(viewModel.selectedChapterUrls) { selected ->
+            binding.chapterSelectedCount.text =
+                getString(R.string.chapters_selected_formatted).format(selected.size)
+            (binding.chapterList.adapter as? ChapterAdapter)?.notifyDataSetChanged()
+        }
+
+        binding.chapterSelectClose.setOnClickListener {
+            viewModel.exitChapterSelectionMode()
+        }
+
+        binding.chapterSelectSelectAll.setOnClickListener {
+            viewModel.toggleSelectAllChapters()
+        }
+
+        binding.chapterSelectRead.setOnClickListener {
+            viewModel.markSelectedChaptersAsRead()
+            showToast(getString(R.string.selected_chapters_marked_read))
+        }
+
+        binding.chapterSelectDownload.setOnClickListener {
+            if (viewModel.downloadSelectedChapters()) {
+                showToast(getString(R.string.selected_chapters_downloading))
+            }
+        }
 
         binding.chaptersFab.setOnClickListener { _ ->
             val act = activity ?: return@setOnClickListener
@@ -1100,6 +1168,15 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 return@observe
             }
             //val hasDownload = progressState.progress > 0
+
+            // el chip "Descargado" depende de los archivos en disco: se invalida la caché y,
+            // al acabar la descarga, se reordena para que la lista muestre los nuevos capítulos
+            viewModel.invalidateDownloadedChaptersCache()
+            if (progressState.state == DownloadState.IsDone &&
+                ResultViewModel.chapterQuickFilter == ResultViewModel.CHAPTER_QUICK_FILTER_DOWNLOADED
+            ) {
+                viewModel.reorderChapters()
+            }
 
             /*binding.downloadDeleteTrashFromResult.apply {
                 isVisible = hasDownload

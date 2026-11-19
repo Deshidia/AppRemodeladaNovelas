@@ -36,6 +36,7 @@ import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_BOOKMARKED
 import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_DOWNLOADED
 import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_READ
 import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_UNREAD
+import com.lagradost.quicknovel.RESULT_CHAPTER_QUICK_FILTER
 import com.lagradost.quicknovel.RESULT_CHAPTER_SORT
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
@@ -49,6 +50,7 @@ import com.lagradost.quicknovel.ui.download.REVERSE_CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_LAST_ACCES_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_LAST_UPDATED_SORT
 import com.lagradost.quicknovel.ui.download.SortingMethod
+import com.lagradost.quicknovel.DownloadFileWorkManager
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.untranslatedName
 import com.lagradost.quicknovel.util.Coroutines.ioSafe
@@ -64,6 +66,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
 
 
 class ResultViewModel : ViewModel() {
@@ -93,6 +96,17 @@ class ResultViewModel : ViewModel() {
             RESULT_CHAPTER_FILTER_UNREAD,
             true,
             Boolean::class
+        )
+
+        // Filtros rápidos de la lista de capítulos (chips Todos/Descargado/Has leído, app oficial)
+        const val CHAPTER_QUICK_FILTER_ALL = 0
+        const val CHAPTER_QUICK_FILTER_DOWNLOADED = 1
+        const val CHAPTER_QUICK_FILTER_READ = 2
+
+        var chapterQuickFilter by PreferenceDelegate(
+            RESULT_CHAPTER_QUICK_FILTER,
+            CHAPTER_QUICK_FILTER_ALL,
+            Int::class
         )
 
     }
@@ -128,11 +142,19 @@ class ResultViewModel : ViewModel() {
         val sort = sortChapterBy
         val state = downloadState.value
         val query = chapterQuery
+        val quickFilter = chapterQuickFilter
 
         return list.filter { chapter ->
             val read = hasReadChapter(chapter)
 
-            ((filterUnread && !read) || (filterRead && read) ||
+            // chip rápido (Todos / Descargado / Has leído), como en la app oficial
+            val matchesQuickFilter = when (quickFilter) {
+                CHAPTER_QUICK_FILTER_DOWNLOADED -> isChapterDownloaded(chapter)
+                CHAPTER_QUICK_FILTER_READ -> read
+                else -> true
+            }
+
+            matchesQuickFilter && ((filterUnread && !read) || (filterRead && read) ||
                     (filterDownloaded && (state != null && state.progress > (chapterIndex(chapter)
                         ?: Int.MAX_VALUE)))) && (query == null || chapter.name.contains(query, ignoreCase = true))
         }.sortedBy { chapter ->
@@ -195,6 +217,131 @@ class ResultViewModel : ViewModel() {
             )
         }
 
+        return true
+    }
+
+    /** Cache de los índices de capítulos que tienen archivo descargado en disco. */
+    private var downloadedChaptersCache: Set<Int>? = null
+
+    fun invalidateDownloadedChaptersCache() {
+        downloadedChaptersCache = null
+    }
+
+    /**
+     * Índices de capítulos realmente descargados (existe el archivo en disco).
+     * A diferencia de downloadProgress.progress (descarga secuencial), aquí cuentan
+     * también las descargas individuales de la selección múltiple.
+     */
+    fun downloadedChapterIndices(): Set<Int> {
+        downloadedChaptersCache?.let { return it }
+        if (!hasLoaded) return emptySet()
+        val streamResponse = (load as? StreamResponse) ?: return emptySet()
+        val act = activity ?: return emptySet()
+        val dir = File(
+            act.filesDir.toString() + BookDownloader2Helper.getDirectory(
+                BookDownloader2Helper.sanitizeFilename(apiName),
+                BookDownloader2Helper.sanitizeFilename(streamResponse.author ?: ""),
+                BookDownloader2Helper.sanitizeFilename(streamResponse.name)
+            )
+        )
+        val indices = dir.listFiles()
+            ?.mapNotNull { it.nameWithoutExtension.toIntOrNull() }
+            ?.toSet()
+            ?: emptySet()
+        downloadedChaptersCache = indices
+        return indices
+    }
+
+    fun isChapterDownloaded(chapter: ChapterData): Boolean {
+        val index = chapterIndex(chapter) ?: return false
+        return index in downloadedChapterIndices()
+    }
+
+    // ==== Selección múltiple de capítulos (app oficial) ====
+
+    /** Modo selección activo (barra inferior "Selected N" visible). */
+    val chapterSelectionMode = MutableLiveData(false)
+
+    /** Urls de los capítulos seleccionados. */
+    val selectedChapterUrls = MutableLiveData<Set<String>>(emptySet())
+
+    fun isSelectingChapters(): Boolean = chapterSelectionMode.value == true
+
+    fun isChapterSelected(chapter: ChapterData): Boolean =
+        selectedChapterUrls.value?.contains(chapter.url) == true
+
+    /** Entra en modo selección con [chapter] ya marcado (icono de descarga / pulsación larga). */
+    fun enterChapterSelectionMode(chapter: ChapterData) {
+        selectedChapterUrls.postValue(setOf(chapter.url))
+        chapterSelectionMode.postValue(true)
+    }
+
+    fun toggleChapterSelection(chapter: ChapterData) {
+        val current = selectedChapterUrls.value ?: emptySet()
+        selectedChapterUrls.postValue(
+            if (chapter.url in current) current - chapter.url else current + chapter.url
+        )
+    }
+
+    /** Selecciona o deselecciona todos los capítulos visibles con el filtro actual. */
+    fun toggleSelectAllChapters() {
+        val visible = chapters.value ?: emptyList()
+        val current = selectedChapterUrls.value ?: emptySet()
+        if (visible.isNotEmpty() && visible.all { it.url in current }) {
+            selectedChapterUrls.postValue(emptySet())
+        } else {
+            selectedChapterUrls.postValue(visible.map { it.url }.toSet())
+        }
+    }
+
+    fun exitChapterSelectionMode() {
+        chapterSelectionMode.postValue(false)
+        selectedChapterUrls.postValue(emptySet())
+    }
+
+    /** Botón de confirmación (✓) de la app oficial: marca los seleccionados como leídos. */
+    fun markSelectedChaptersAsRead() {
+        val selected = selectedChapterUrls.value ?: return
+        val streamResponse = (loadResponse.value as? Resource.Success)?.value as? StreamResponse
+            ?: return
+        for (chapter in streamResponse.data) {
+            if (chapter.url in selected) {
+                setReadChapter(chapter, true)
+            }
+        }
+        exitChapterSelectionMode()
+        isResume = true
+        reorderChapters()
+    }
+
+    /**
+     * Botón de descarga (⬇) de la app oficial: descarga solo los capítulos seleccionados.
+     * Devuelve false si no se ha podido empezar (sin selección o descarga ya en curso).
+     */
+    fun downloadSelectedChapters(): Boolean {
+        if (!hasLoaded) return false
+        val selected = selectedChapterUrls.value ?: return false
+        if (selected.isEmpty()) return false
+        val act = activity ?: return false
+        val streamResponse = load as? StreamResponse ?: return false
+        val api = repo ?: return false
+
+        when (downloadProgress[loadId]?.state) {
+            DownloadState.IsDownloading, DownloadState.IsPending -> {
+                showToast(R.string.download_already_running)
+                return false
+            }
+
+            else -> {}
+        }
+
+        val indices = streamResponse.data.mapIndexedNotNull { index, chapter ->
+            if (chapter.url in selected) index else null
+        }
+        if (indices.isEmpty()) return false
+
+        DownloadFileWorkManager.downloadChapters(streamResponse, act, indices)
+        exitChapterSelectionMode()
         return true
     }
 
@@ -789,6 +936,8 @@ class ResultViewModel : ViewModel() {
 
     fun setDownloadState(state: DownloadProgressState) {
         downloadStateValue = state
+        // nuevos archivos en disco: el chip "Descargado" tiene que recalcular
+        downloadedChaptersCache = null
         downloadState.postValue(state)
     }
 

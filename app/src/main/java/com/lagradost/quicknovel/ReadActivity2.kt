@@ -780,7 +780,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             textAdapter.updateSearchHighlights(highlights, current)
         }
         val drawerBackCallback = onBackPressedDispatcher.addCallback(this, enabled = false) {
-            untranslatedDrawer.close()
+            // con Sustituir desplegado a pantalla completa, atrás lo pliega antes de cerrar el panel
+            if (!untranslatedDrawer.collapseReplace()) {
+                untranslatedDrawer.close()
+            }
         }
         untranslatedDrawer.onStateChanged = { open -> drawerBackCallback.isEnabled = open }
 

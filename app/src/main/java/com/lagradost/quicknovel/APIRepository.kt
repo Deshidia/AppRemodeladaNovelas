@@ -5,6 +5,8 @@ import com.lagradost.quicknovel.mvvm.logError
 import com.lagradost.quicknovel.mvvm.safeApiCall
 import com.lagradost.quicknovel.util.Coroutines.threadSafeListOf
 import com.lagradost.quicknovel.util.GoogleTranslateOnline
+import com.lagradost.quicknovel.util.NovelTitleCache
+import com.lagradost.quicknovel.util.chooseStableTitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -116,7 +118,7 @@ class APIRepository(val api: MainAPI) {
                 api.load(fixedUrl)?.also { response ->
                     // Título, sinopsis y etiquetas: una petición pequeña y necesaria ya, porque el
                     // título traducido forma parte del id de la novela.
-                    translateMetadata(response)
+                    translateMetadata(response, fixedUrl)
 
                     // Los nombres de capítulo pueden ser miles: se traducen aparte, sin bloquear.
                     (response as? StreamResponse)?.let { stream ->
@@ -149,8 +151,17 @@ class APIRepository(val api: MainAPI) {
         return result
     }
 
-    /** Traduce título, sinopsis y etiquetas al español (si la fuente no está ya en español). */
-    private suspend fun translateMetadata(response: LoadResponse) {
+    /**
+     * Traduce título, sinopsis y etiquetas al español (si la fuente no está ya en español).
+     *
+     * El título NO se re-traduce en cada carga: la primera vez que se traduce se congela en
+     * [NovelTitleCache] y a partir de entonces se reutiliza siempre. El nombre de la novela es la
+     * clave de todo su estado (progreso de lectura, reglas "Sustituir", subrayado, id, fichero
+     * EPUB de descargas...): si la llamada a Google fallara un día (rate limit, red...), volver al
+     * título original cambiaría esa identidad y el usuario vería su novela "reiniciada" (capítulo
+     * antiguo y "Sustituir" vacío) hasta que la traducción volviera a funcionar.
+     */
+    private suspend fun translateMetadata(response: LoadResponse, fixedUrl: String) {
         if (api.lang == "es") return
 
         // El título traducido forma parte del id de la novela y es lo que se muestra, pero para
@@ -159,12 +170,52 @@ class APIRepository(val api: MainAPI) {
             response.originalName = response.name
         }
 
+        // ===== Título: identidad de la novela =====
+        val cachedTitle = NovelTitleCache.get(api.name, fixedUrl)
+        if (cachedTitle != null) {
+            response.name = cachedTitle
+        } else {
+            val translatedTitle = try {
+                GoogleTranslateOnline.onlineTranslate(
+                    listOf(response.name),
+                    api.lang,
+                    "es"
+                ).firstOrNull()?.takeIf { it.isNotBlank() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logError(e)
+                null
+            }
+
+            // Nombre con el que la novela ya está guardada en biblioteca/descargas/historial:
+            // la primera carga tras actualizar prefiere ese nombre para no mover los datos.
+            val storedCardTitle = NovelTitleCache.storedCardName(api.name, fixedUrl, response.url)
+
+            val chosen = chooseStableTitle(
+                cachedTitle = null,
+                storedCardTitle = storedCardTitle,
+                storedCardHasData = storedCardTitle != null && NovelTitleCache.hasReaderData(storedCardTitle),
+                translatedTitle = translatedTitle,
+                translatedHasData = translatedTitle != null && NovelTitleCache.hasReaderData(translatedTitle),
+                fallbackHasData = NovelTitleCache.hasReaderData(response.name),
+                fallback = response.name,
+            )
+            if (chosen != null) {
+                response.name = chosen
+                NovelTitleCache.set(api.name, fixedUrl, chosen)
+            }
+            // si chosen == null no hay nada decidible: se conserva el título original sin
+            // congelarlo, para que una carga futura con traducción disponible pueda fijarlo.
+        }
+
+        // ===== Sinopsis y etiquetas: solo estética, no afectan a la identidad =====
         try {
             val toTranslate = mutableListOf<String>()
-            toTranslate.add(response.name)
             response.synopsis?.let { toTranslate.add(it) }
             val tags = response.tags
             if (tags != null) toTranslate.addAll(tags)
+            if (toTranslate.isEmpty()) return
 
             val translated = GoogleTranslateOnline.onlineTranslate(
                 toTranslate,
@@ -175,7 +226,6 @@ class APIRepository(val api: MainAPI) {
 
             if (translated.size == toTranslate.size) {
                 var index = 0
-                response.name = translated[index++]
                 if (response.synopsis != null) {
                     response.synopsis = translated[index++]
                 }
