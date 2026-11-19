@@ -621,11 +621,12 @@
                     app:tint="?attr/textColor" />
             </LinearLayout>
 
-            <!-- Sustituir, plegado en la parte baja del panel: solo la altura justa para el
-                 título, así la lista de términos queda lo más alta posible. Al tocar la barra
-                 o deslizar hacia arriba (como al bajar el scroll) el editor se despliega a
-                 pantalla completa: la vista completa vive al final del layout raíz y su alto
-                 y ancho se animan desde el código partiendo de esta barra. -->
+            <!-- Sustituir, plegado en la parte baja del panel: se ve solo la línea del título
+                 del editor («Sustituciones de: …»), con el mismo estilo que la ventana
+                 integrada de antes, así la lista de términos queda lo más alta posible. Al
+                 tocarla —o arrastrar hacia arriba— el editor se despliega a pantalla completa
+                 siguiendo al dedo, como una persiana: la capa vive al final del layout raíz y
+                 sube deslizándose, sin fundidos ni cambios de tamaño. -->
             <LinearLayout
                 android:id="@+id/untranslated_replace_bar"
                 android:layout_width="match_parent"
@@ -635,28 +636,21 @@
                 android:focusable="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="12dp"
-                android:paddingTop="10dp"
-                android:paddingEnd="8dp"
-                android:paddingBottom="10dp">
-
-                <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:importantForAccessibility="no"
-                    android:src="@drawable/ic_baseline_edit_24"
-                    app:tint="?attr/grayTextColor" />
+                android:paddingStart="16dp"
+                android:paddingTop="15dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="15dp">
 
                 <TextView
                     android:id="@+id/untranslated_replace_bar_title"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
                     android:layout_weight="1"
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:textColor="?attr/textColor"
-                    android:textSize="13sp"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
                     tools:text="Sustituciones de: Mi novela" />
 
                 <ImageView
@@ -726,9 +720,9 @@
             app:tint="?attr/textColor" />
     </LinearLayout>
 
-    <!-- Sustituir a pantalla completa: nace de la barra del panel (mismo ancho y alto) y se
-         despliega hacia arriba con una animación de alto y ancho desde el código. El editor
-         en sí (del layout de ajustes del lector) se pega aquí desde el código. -->
+    <!-- Sustituir a pantalla completa: tamaño fijo, entra como una persiana que sube siguiendo
+         al dedo (o deslizándose sola al tocar la línea del título), sin fundidos. El editor en
+         sí (del layout de ajustes del lector) se pega aquí desde el código. -->
     <LinearLayout
         android:id="@+id/untranslated_replace_full"
         android:layout_width="match_parent"
@@ -746,6 +740,8 @@
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:background="?attr/primaryBlackBackground"
+            android:clickable="true"
+            android:focusable="true"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="4dp"

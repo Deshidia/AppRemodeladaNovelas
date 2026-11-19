@@ -4,8 +4,8 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.view.Gravity
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.ViewConfiguration
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -16,7 +16,9 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.view.ViewGroup
+import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.Interpolator
 import android.widget.FrameLayout
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.databinding.DialogUntranslatedTermBinding
@@ -34,6 +36,7 @@ import com.lagradost.quicknovel.util.UIHelper.hideKeyboard
 import com.lagradost.quicknovel.util.UntranslatedTerms
 import com.lagradost.quicknovel.util.mergeReplacementRules
 import com.lagradost.quicknovel.util.toPx
+import kotlin.math.abs
 import kotlin.math.min
 
 /**
@@ -49,12 +52,13 @@ import kotlin.math.min
  * (cian, distinto del marcador del usuario) y la que se visita lleva tinte. Al navegar, el
  * panel se cierra y una píldora flotante permite seguir avanzando mientras se lee.
  *
- * Abajo del panel, donde estaba el botón, va plegada la propia ventana de Sustituir: una barra
- * fina que solo muestra «Sustituciones de: …» (así la lista de términos queda lo más alta
- * posible). Al tocarla, o deslizar hacia arriba como quien baja el scroll, el editor de reglas
- * de los ajustes del lector se despliega a pantalla completa con una transición suave y se
- * pliega de vuelta con el botón atrás, deslizando hacia abajo o con la flecha de la cabecera.
- * Sus cambios se reaplican al capítulo en caliente.
+ * Abajo del panel queda Sustituir como parte del panel, plegada a la altura de la línea del
+ * título del editor («Sustituciones de: …»), con el mismo estilo que la ventana integrada de
+ * siempre. Al tocarla —o arrastrar hacia arriba sobre ella— el editor se despliega a pantalla
+ * completa siguiendo al dedo, como una persiana (la misma sensación que al bajar la barra de
+ * notificaciones): sube y baja de una pieza, sin fundidos ni saltos. Se pliega de vuelta con
+ * el botón atrás, arrastrando hacia abajo o con la flecha de la cabecera. Sus cambios se
+ * reaplican al capítulo en caliente.
  */
 class UntranslatedTermsDrawer(
     private val activity: ReadActivity2,
@@ -177,14 +181,24 @@ class UntranslatedTermsDrawer(
     /** Animación de despliegue/plegado del editor a pantalla completa (null = parado). */
     private var replaceAnim: ValueAnimator? = null
 
-    // gesto en la barra plegada: deslizar hacia arriba (como quien baja el scroll) despliega;
-    // el toque simple también despliega (OnClickListener)
-    private var barTouchY = 0f
-    private var barExpandFired = false
+    /** Velocidad (px/s) a partir de la cual un lanzamiento decide el desenlace del arrastre. */
+    private val replaceFlingVelocity = 1200f
 
-    // gesto en la cabecera a pantalla completa: deslizar hacia abajo pliega de vuelta
-    private var headerTouchY = 0f
-    private var headerCollapseFired = false
+    // ritmo de la persiana: la duración real se reparte según la distancia que queda por
+    // recorrer (entre el mínimo y el máximo), así el recorrido completo se ve continuo y
+    // reposado, nunca el salto seco de una animación corta a pantalla completa
+    private val replaceOpenMs = 400L
+    private val replaceOpenMinMs = 140L
+    private val replaceCloseMs = 320L
+    private val replaceCloseMinMs = 120L
+
+    // arrastre tipo persiana: el panel sigue al dedo mientras se arrastra y al soltar se
+    // asienta según hasta dónde llegó y con qué velocidad (como la barra de notificaciones)
+    private var dragTracker: VelocityTracker? = null
+    private var dragStartRawY = 0f
+    private var dragStartTranslationY = 0f
+    private var dragOpening = false
+    private var dragMoved = false
 
     fun setup() {
         binding.apply {
@@ -211,51 +225,29 @@ class UntranslatedTermsDrawer(
                 untranslatedSearchPill.isVisible = false
             }
 
-            // barra plegada de Sustituir: toque o deslizamiento hacia arriba = pantalla completa
+            // bloque plegado de Sustituir: toque simple = despliegue animado; arrastrar hacia
+            // arriba = el panel sigue al dedo y al soltar se asienta (como la persiana)
             untranslatedReplaceBar.setOnClickListener { expandReplace() }
             untranslatedReplaceBar.setOnTouchListener { _, ev ->
                 when (ev.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        barTouchY = ev.rawY
-                        barExpandFired = false
-                        false
-                    }
-
-                    MotionEvent.ACTION_MOVE -> {
-                        if (!barExpandFired && barTouchY - ev.rawY >
-                            ViewConfiguration.get(activity).scaledTouchSlop * 2f
-                        ) {
-                            barExpandFired = true
-                            expandReplace()
-                        }
-                        barExpandFired
-                    }
-
-                    else -> barExpandFired
+                    MotionEvent.ACTION_DOWN -> startReplaceDrag(ev, opening = true)
+                    MotionEvent.ACTION_MOVE -> moveReplaceDrag(ev)
+                    MotionEvent.ACTION_UP -> endReplaceDrag(ev)
+                    MotionEvent.ACTION_CANCEL -> cancelReplaceDrag()
+                    else -> dragMoved
                 }
             }
 
-            // cabecera a pantalla completa: toque en la flecha o deslizamiento hacia abajo = plegar
+            // cabecera a pantalla completa: la flecha pliega; arrastrar hacia abajo = el panel
+            // sigue al dedo y al soltar se asienta
             untranslatedReplaceCollapse.setOnClickListener { collapseReplace() }
             untranslatedReplaceFullHeader.setOnTouchListener { _, ev ->
                 when (ev.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        headerTouchY = ev.rawY
-                        headerCollapseFired = false
-                        false
-                    }
-
-                    MotionEvent.ACTION_MOVE -> {
-                        if (!headerCollapseFired && ev.rawY - headerTouchY >
-                            ViewConfiguration.get(activity).scaledTouchSlop * 2f
-                        ) {
-                            headerCollapseFired = true
-                            collapseReplace()
-                        }
-                        headerCollapseFired
-                    }
-
-                    else -> headerCollapseFired
+                    MotionEvent.ACTION_DOWN -> startReplaceDrag(ev, opening = false)
+                    MotionEvent.ACTION_MOVE -> moveReplaceDrag(ev)
+                    MotionEvent.ACTION_UP -> endReplaceDrag(ev)
+                    MotionEvent.ACTION_CANCEL -> cancelReplaceDrag()
+                    else -> dragMoved
                 }
             }
         }
@@ -321,7 +313,9 @@ class UntranslatedTermsDrawer(
 
         // el editor desplegado no puede quedarse flotando sin el panel
         if (binding.untranslatedReplaceFull.isVisible || replaceAnim != null) {
+            val running = replaceAnim
             replaceAnim = null
+            running?.cancel()
             hideReplaceOverlay()
         }
 
@@ -373,100 +367,185 @@ class UntranslatedTermsDrawer(
     }
 
     /**
-     * Despliega Sustituir a pantalla completa con una transición suave: la capa nace con el
-     * tamaño y la esquina de la barra del panel (abajo a la derecha) y crece hasta cubrir
-     * todo, como una hoja que se abre hacia arriba.
+     * Despliega Sustituir a pantalla completa con la misma mecánica que la barra inferior del
+     * lector: sube deslizándose de una pieza, sin fundidos ni cambios de tamaño. La capa
+     * mantiene su tamaño fijo todo el tiempo, así el contenido no se reacomoda nunca. Con un
+     * toque simple sube ella sola con una animación larga y proporcionada; arrastrando sobre
+     * la barra (o sobre la cabecera, para atraparla en pleno vuelo) es el dedo quien marca el
+     * recorrido, igual que al bajar la barra de notificaciones.
      */
     private fun expandReplace() {
         val overlay = binding.untranslatedReplaceFull
         // con el panel ya cerrándose no se despliega: se quedaría flotando sin el panel
-        if (replaceTab == null || !isOpen || replaceAnim != null || overlay.isVisible) return
-        val root = overlay.parent as ViewGroup
+        if (replaceTab == null || !isOpen || replaceAnim != null) return
+        val travel = replaceTravel()
+        if (travel <= 0) return
 
-        // punto de partida: la barra del panel (mismo ancho que el panel, mismo alto que la barra)
-        val barHeight = binding.untranslatedReplaceBar.height.takeIf { it > 0 } ?: 40.toPx
-        val drawerWidth = binding.untranslatedDrawer.width.takeIf { it > 0 }
-            ?: min(320.toPx, (activity.resources.displayMetrics.widthPixels * 0.85f).toInt())
-        val fullWidth = root.width
-        val fullHeight = root.height
-        if (fullWidth <= 0 || fullHeight <= 0) return
-
-        overlay.layoutParams = (overlay.layoutParams as FrameLayout.LayoutParams).apply {
-            width = drawerWidth
-            height = barHeight
-            gravity = Gravity.BOTTOM or Gravity.END
+        if (overlay.isVisible) {
+            // quedó a medio camino (p. ej. tras un arrastre cancelado): termina de subir
+            if (overlay.translationY > 0f) {
+                animateReplaceTo(0f, replaceOpenMs, replaceOpenMinMs, DecelerateInterpolator(1.2f))
+            }
+            return
         }
-        overlay.isVisible = true
 
-        replaceAnim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 280L
-            interpolator = DecelerateInterpolator(1.5f)
+        // estado inicial: del todo abajo, fuera de la pantalla; entra deslizando hacia arriba
+        overlay.isVisible = true
+        overlay.translationY = travel.toFloat()
+        animateReplaceTo(0f, replaceOpenMs, replaceOpenMinMs, DecelerateInterpolator(1.2f))
+    }
+
+    /** Recorrido total del despliegue: el alto de la pantalla del lector. */
+    private fun replaceTravel(): Int =
+        (binding.untranslatedReplaceFull.parent as ViewGroup).height
+
+    /**
+     * Arranque del arrastre tipo persiana. Devuelve false para que la vista siga siendo
+     * clickable: el toque simple llega al OnClickListener y el arrastre continúa aquí.
+     */
+    private fun startReplaceDrag(ev: MotionEvent, opening: Boolean): Boolean {
+        // si había una animación a medio camino, se retoma desde la posición actual
+        val running = replaceAnim
+        replaceAnim = null
+        running?.cancel()
+        dragStartRawY = ev.rawY
+        val overlay = binding.untranslatedReplaceFull
+        dragStartTranslationY =
+            if (overlay.isVisible) overlay.translationY else replaceTravel().toFloat()
+        dragOpening = opening
+        dragMoved = false
+        dragTracker?.recycle()
+        dragTracker = VelocityTracker.obtain()
+        dragTracker?.addMovement(ev)
+        return false
+    }
+
+    /** El panel sigue al dedo (1:1) en cuanto el arrastre pasa del umbral. */
+    private fun moveReplaceDrag(ev: MotionEvent): Boolean {
+        dragTracker?.addMovement(ev)
+        val slop = ViewConfiguration.get(activity).scaledTouchSlop.toFloat()
+        val travel = replaceTravel().toFloat()
+        val dy = ev.rawY - dragStartRawY
+        if (!dragMoved && abs(dy) > slop) dragMoved = true
+        if (dragMoved) {
+            val overlay = binding.untranslatedReplaceFull
+            if (!overlay.isVisible) overlay.isVisible = true
+            overlay.translationY = (dragStartTranslationY + dy).coerceIn(0f, travel)
+        }
+        return dragMoved
+    }
+
+    /** Al soltar: si fue un toque simple lo resuelve el OnClickListener; si no, se asienta. */
+    private fun endReplaceDrag(ev: MotionEvent): Boolean {
+        dragTracker?.addMovement(ev)
+        if (!dragMoved) {
+            dragTracker?.recycle()
+            dragTracker = null
+            return false
+        }
+        settleReplaceDrag()
+        return true
+    }
+
+    private fun cancelReplaceDrag(): Boolean {
+        // aunque no llegara a moverse, se asienta: así el panel nunca queda congelado a medio
+        // camino si el sistema interrumpe el gesto
+        settleReplaceDrag()
+        return true
+    }
+
+    /**
+     * Asienta el panel tras soltar el arrastre: manda la posición (mitad del recorrido) salvo
+     * que haya un lanzamiento claro en una dirección.
+     */
+    private fun settleReplaceDrag() {
+        val travel = replaceTravel().toFloat()
+        dragTracker?.computeCurrentVelocity(1000)
+        val vy = dragTracker?.yVelocity ?: 0f
+        dragTracker?.recycle()
+        dragTracker = null
+
+        val current = binding.untranslatedReplaceFull.translationY
+        val open = when {
+            vy < -replaceFlingVelocity -> true
+            vy > replaceFlingVelocity -> false
+            dragOpening -> current <= travel / 2f
+            else -> current < travel / 2f
+        }
+        val target = if (open) 0f else travel
+        animateReplaceTo(
+            target,
+            if (open) replaceOpenMs else replaceCloseMs,
+            if (open) replaceOpenMinMs else replaceCloseMinMs,
+            if (open) DecelerateInterpolator(1.2f) else AccelerateInterpolator(1.5f)
+        )
+    }
+
+    /**
+     * Anima el panel hasta la posición indicada; al bajar del todo se oculta. La duración se
+     * reparte según la distancia que queda por recorrer, entre un mínimo y un máximo: los
+     * recorridos cortos terminan antes y el movimiento se ve fluido de principio a fin.
+     */
+    private fun animateReplaceTo(
+        targetY: Float,
+        maxDuration: Long,
+        minDuration: Long,
+        interpolator: Interpolator,
+    ) {
+        val overlay = binding.untranslatedReplaceFull
+        val travel = replaceTravel().toFloat()
+        val remaining = abs(targetY - overlay.translationY)
+        val duration = if (travel <= 0f) {
+            maxDuration
+        } else {
+            (maxDuration * remaining / travel).toLong().coerceIn(minDuration, maxDuration)
+        }
+        replaceAnim = ValueAnimator.ofFloat(overlay.translationY, targetY).apply {
+            this.duration = duration
+            this.interpolator = interpolator
             addUpdateListener { animator ->
                 if (animator !== replaceAnim) return@addUpdateListener
-                val t = animator.animatedValue as Float
-                overlay.layoutParams =
-                    (overlay.layoutParams as FrameLayout.LayoutParams).apply {
-                        width = (drawerWidth + (fullWidth - drawerWidth) * t).toInt()
-                        height = (barHeight + (fullHeight - barHeight) * t).toInt()
-                    }
+                overlay.translationY = animator.animatedValue as Float
             }
             doOnEnd {
                 if (it !== replaceAnim) return@doOnEnd
                 replaceAnim = null
-                overlay.layoutParams =
-                    (overlay.layoutParams as FrameLayout.LayoutParams).apply {
-                        width = ViewGroup.LayoutParams.MATCH_PARENT
-                        height = ViewGroup.LayoutParams.MATCH_PARENT
-                    }
+                if (targetY >= travel) hideReplaceOverlay()
             }
             start()
         }
     }
 
     /**
-     * Plega el editor de vuelta a la barra del panel, con la animación inversa (o sin ella si
-     * venía a medio camino). Devuelve true si la capa estaba abierta: el botón atrás la usa
-     * para plegar el editor antes de cerrar el panel.
+     * Plega el editor de vuelta a la línea del título del panel: baja deslizándose de una
+     * pieza, igual que entró (o sin animación si venía a medio camino). Devuelve true si la
+     * capa estaba abierta: el botón atrás la usa para plegar el editor antes de cerrar el
+     * panel.
      */
     fun collapseReplace(): Boolean {
         val overlay = binding.untranslatedReplaceFull
         val midAnimation = replaceAnim != null
         if (!midAnimation && !overlay.isVisible) return false
 
-        val barHeight = binding.untranslatedReplaceBar.height.takeIf { it > 0 } ?: 40.toPx
-        val drawerWidth = binding.untranslatedDrawer.width.takeIf { it > 0 }
-            ?: min(320.toPx, (activity.resources.displayMetrics.widthPixels * 0.85f).toInt())
-        if (midAnimation || barHeight <= 0 || overlay.height <= 0 || overlay.width <= 0) {
+        if (midAnimation || replaceTravel() <= 0) {
             // sin condiciones para animar: plegado seco, sin saltos raros a medio camino
+            val running = replaceAnim
             replaceAnim = null
+            running?.cancel()
             hideReplaceOverlay()
             return true
         }
 
-        val startWidth = overlay.width
-        val startHeight = overlay.height
-        replaceAnim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 240L
-            interpolator = DecelerateInterpolator(1.5f)
-            addUpdateListener { animator ->
-                if (animator !== replaceAnim) return@addUpdateListener
-                val t = animator.animatedValue as Float
-                overlay.layoutParams =
-                    (overlay.layoutParams as FrameLayout.LayoutParams).apply {
-                        width = (startWidth + (drawerWidth - startWidth) * t).toInt()
-                        height = (startHeight + (barHeight - startHeight) * t).toInt()
-                    }
-            }
-            doOnEnd {
-                if (it !== replaceAnim) return@doOnEnd
-                hideReplaceOverlay()
-            }
-            start()
-        }
+        animateReplaceTo(
+            replaceTravel().toFloat(),
+            replaceCloseMs,
+            replaceCloseMinMs,
+            AccelerateInterpolator(1.5f)
+        )
         return true
     }
 
-    /** Oculta la capa a pantalla completa y deja su tamaño listo para el próximo despliegue. */
+    /** Oculta la capa a pantalla completa y la deja lista para el próximo despliegue. */
     private fun hideReplaceOverlay() {
         replaceAnim = null
         val overlay = binding.untranslatedReplaceFull
@@ -475,10 +554,9 @@ class UntranslatedTermsDrawer(
             // el teclado se va con el editor: que no quede flotando sobre el texto
             hideKeyboard(binding.untranslatedReplaceBar)
         }
-        overlay.layoutParams = (overlay.layoutParams as FrameLayout.LayoutParams).apply {
-            width = ViewGroup.LayoutParams.MATCH_PARENT
-            height = ViewGroup.LayoutParams.MATCH_PARENT
-        }
+        // lista para el próximo despliegue: del todo abajo, opaca
+        overlay.translationY = replaceTravel().toFloat()
+        overlay.alpha = 1f
     }
 
     private fun currentSubtitle(): String {
