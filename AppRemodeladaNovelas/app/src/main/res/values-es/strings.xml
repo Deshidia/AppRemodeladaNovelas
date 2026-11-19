@@ -1,0 +1,389 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Navegación Principal / Títulos de Pestañas -->
+    <string name="app_name">QuickNovel</string>
+    <string name="title_home">Explorar</string>
+    <string name="title_search">Buscar</string>
+    <string name="title_download">Biblioteca</string>
+    <string name="title_history">Historial</string>
+    <string name="title_settings">Ajustes</string>
+
+    <!-- Información de la Novela / Detalles -->
+    <string name="synopsis">Sinopsis</string>
+    <string name="tags">Etiquetas</string>
+    <string name="views">Vistas</string>
+    <string name="no_author">Autor desconocido</string>
+    <string name="no_data">Sin información</string>
+    <string name="info">Información</string>
+    <string name="home_more_info">Más información</string>
+    <string name="battery_format">%d%%</string>
+    <string name="novel">Novela</string>
+    <string name="reviews">Reseñas</string>
+    <string name="related">Relacionado</string>
+    <string name="rating_format">Formato de puntuación</string>
+    <string name="overall_rating_format">General %s</string>
+    <string name="votes_format">%d Votos</string>
+    <string name="novel_imagecover_descript">Portada de la novela</string>
+    <string name="background_image_descript">Fondo de la novela</string>
+    <string name="poster_descript">Póster</string>
+    <string name="shadow_descript">Sombra</string>
+    <string name="has_read">Has leído</string>
+    <string name="chapter">Capítulo</string>
+    <string name="chapters">Capítulos</string>
+
+    <!-- Búsqueda y Proveedores -->
+    <string name="search">Búsqueda</string>
+    <string name="search_hint">Buscar novelas…</string>
+    <string name="search_downloads">Buscar mis novelas…</string>
+    <string name="advanced_search">Búsqueda avanzada</string>
+    <string name="advanced_search_desc">Muestra los resultados de búsqueda separados por proveedor</string>
+    <string name="search_providers">Proveedores</string>
+    <string name="search_roviders">Proveedores</string>
+    <string name="change_providers_descript">Cambiar proveedor</string>
+    <string name="poster_open_source_descript">Ver fuente original</string>
+    <string name="back_to_search">Volver a buscar</string>
+    <string name="no_chapters_found">No se encontraron capítulos</string>
+
+    <!-- Descargas y Gestión de Archivos -->
+    <string name="downloads_text">Descargas</string>
+    <string name="download">Descargar</string>
+    <string name="download_text">Descargar</string>
+    <string name="download_from_chapter">Descarga parcial</string>
+    <string name="download_path_key">download_path_key</string>
+    <string name="download_path_pref">Ruta de descarga</string>
+    <string name="download_started">Descarga iniciada</string>
+    <string name="download_failed">Error en descarga</string>
+    <string name="downloaded">Descargado</string>
+    <string name="re_downloaded">Volver a descargar</string>
+    <string name="generate_epub">Generar EPUB</string>
+    <string name="generating_epub">Generando EPUB</string>
+    <string name="import_epub">Importar un libro</string>
+    <string name="tab_downloads">Descargas</string>
+
+    <!-- Acciones de Usuario -->
+    <string name="open_text">Leer</string>
+    <string name="read_epub">Leer libro</string>
+    <string name="update_text">Actualizar</string>
+    <string name="update">Actualizar</string>
+    <string name="delete">Borrar</string>
+    <string name="remove">Eliminar</string>
+    <string name="clear">Limpiar</string>
+    <string name="save">Guardar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="ok">Aceptar</string>
+    <string name="close">Cerrar</string>
+    <string name="done">Hecho</string>
+    <string name="manage">Gestionar</string>
+    <string name="pause">Pausar</string>
+    <string name="resume">Reanudar</string>
+    <string name="stop">Detener</string>
+    <string name="result_share">Compartir</string>
+    <string name="open_in_browser">Navegar</string>
+    <string name="history_more_options">Más opciones</string>
+    <string name="clear_history">Borrar historial</string>
+    <string name="remove_history">Eliminar historial</string>
+    <string name="dont_show_again">No volver a mostrar</string>
+
+    <!-- Estados de Lectura (Bookmark) -->
+    <string name="type_reading">Leyendo</string>
+    <string name="type_on_hold">Postergado</string>
+    <string name="type_completed">Completado</string>
+    <string name="type_dropped">Abandonado</string>
+    <string name="type_plan_to_read">Planeo leer</string>
+    <string name="type_none">Ninguno</string>
+
+    <!-- listas de biblioteca (Ajustes > Listas de la biblioteca) -->
+    <string name="library_lists_key">library_lists_key</string>
+    <string name="library_lists_settings">Listas de la biblioteca</string>
+    <string name="library_lists_settings_desc">Crea, renombra, elimina o reordena las listas usadas para organizar tu biblioteca, en lugar de usar solo las predeterminadas.</string>
+    <string name="library_list_add">Añadir lista</string>
+    <string name="library_list_add_hint">Nombre de la lista</string>
+    <string name="library_list_rename">Renombrar lista</string>
+    <string name="library_list_delete">Eliminar lista</string>
+    <string name="library_list_reorder">Reordenar lista</string>
+    <string name="library_list_delete_confirm">¿Eliminar \"%s\"? Las novelas de esta lista no se borrarán de tu dispositivo.</string>
+    <string name="library_list_delete_move_to">Mover sus novelas a</string>
+    <string name="library_list_delete_move_none">No asignarlas a ninguna lista</string>
+    <string name="library_list_name_empty">Escribe un nombre para la lista</string>
+    <string name="library_list_last_one">Necesitas al menos una lista de biblioteca</string>
+
+    <!-- Interfaz del Lector -->
+    <string name="read_action_settings">Ajustes</string>
+    <string name="read_action_chapters">Capítulos</string>
+    <string name="read_action_chapters_formatted" formatted="true">%d Capítulos</string>
+    <string name="select_chapter">Seleccionar capítulo</string>
+    <string name="search_chapters">Buscar capítulos…</string>
+    <string name="reload_chapter">Recargar capítulo</string>
+    <string name="reload_chapter_format">Recargando capítulo %s</string>
+    <string name="latest_format">Último: %s</string>
+    <string name="chapter_format" formatted="true">Capítulo %s</string>
+    <string name="read_display_settings">Pantalla</string>
+    <string name="tab_translation">Traductor</string>
+    <string name="read_text_size">Texto</string>
+    <string name="bigger_font">Fuente más grande</string>
+    <string name="smaller_font">Fuente más pequeña</string>
+    <string name="reader_font">Fuente del lector</string>
+    <string name="text_font">Fuente del texto</string>
+    <string name="font">Fuente</string>
+    <string name="read_color">Tema de lectura</string>
+    <string name="background_color">Color de fondo</string>
+    <string name="text_color">Color del texto</string>
+    <string name="reading_color">Color de lectura (TTS)</string>
+    <string name="text_size">Tamaño del texto</string>
+    <string name="text_padding">Margen lateral</string>
+    <string name="text_padding_top">Margen superior</string>
+    <string name="bionic_reading">Lectura biónica</string>
+    <string name="selectable_text">Texto seleccionable</string>
+    <string name="show_authors_notes">Mostrar notas del autor</string>
+    <string name="home_expanded_hide">Ocultar</string>
+    <string name="download_format_key">download_format</string>
+    <string name="exampleTXT">this is <annotation key="rounded">a regular</annotation> paragraph.</string>
+    <string name="paragraph_spacing">Espacio entre parrafos</string>
+    <string name="more_spacing">Más espacio</string>
+    <string name="less_spacing">Menos espacio</string>
+
+    <!-- Comportamiento del Lector -->
+    <string name="scroll_type">Tipo de desplazamiento</string>
+    <string name="inf_scroll">Desplazamiento infinito</string>
+    <string name="button_scroll">Botones de capítulos</string>
+    <string name="overscroll_scroll">Efecto de rebote (Overscroll)</string>
+    <string name="scroll_with_volume_keys">Desplazarse con teclas de volumen</string>
+    <string name="keep_screen_active">Mantener pantalla encendida</string>
+    <string name="twelve_hour_time">Formato 12 horas</string>
+    <string name="show_battery">Mostrar batería</string>
+    <string name="show_time">Mostrar hora</string>
+
+    <!-- Rotación de Pantalla -->
+    <string name="read_action_screen_rotation">Rotar pantalla</string>
+    <string name="default_text">Por defecto</string>
+    <string name="rotation_type">Modo de rotación</string>
+    <string name="rotation_free">Libre</string>
+    <string name="rotation_portrait">Vertical</string>
+    <string name="rotation_landscape">Horizontal</string>
+    <string name="rotation_force_portrait">Vertical bloqueado</string>
+    <string name="rotation_force_landscape">Horizontal bloqueado</string>
+
+    <!-- Texto a Voz (TTS) -->
+    <string name="read_action_tts">Lectura en voz alta</string>
+    <string name="text_to_speech">Lectura en voz alta</string>
+    <string name="tts_voice_title">Voz de lectura (TTS)</string>
+    <string name="tts_locale">Idioma</string>
+    <string name="tts_voice">Voz</string>
+    <string name="start_chapter">Capitulos salteados</string>
+    <string name="tts_speed">Velocidad de voz</string>
+    <string name="tts_pitch">Tono de voz</string>
+    <string name="lock_tts">Bloquear área de lectura TTS</string>
+    <string name="text_to_speech_channel_description">Notificación del lector de voz</string>
+    <string name="sleep_timer">Temporizador</string>
+    <string name="sleep_format">%d min</string>
+    <string name="sleep_format_stop">La lectura parará en %d min</string>
+    <string name="got_null_data">No hay información</string>
+
+
+
+    <!-- Traducción -->
+    <string name="google_translate">Traductor de Google</string>
+    <string name="online_translate">Traducción online</string>
+    <string name="deepl_translate">Traducción de DeepL</string>
+    <string name="deepl_api_key">API Key de DeepL (opcional)</string>
+    <string name="deepl_api_key_hint">Opcional. Sin clave se usa el traductor web gratuito de DeepL: no necesita cuenta pero es más limitado, y si DeepL bloquea tu conexión temporalmente (error 429) espera unos minutos o cambia de red. Con una API key (gratuita o Pro; las gratuitas terminan en \":fx\") se usa la API oficial, más estable.</string>
+    <string name="download_ml">Descargar modelo de traducción</string>
+    <string name="download_ml_long">Para traducir localmente se necesita descargar el modelo (~30MB)</string>
+    <string name="translating">Traduciendo: </string>
+    <string name="stop_translation">Detener traducción</string>
+    <string name="translation_stopped">Traducción detenida. Pulsa «Aplicar» en los ajustes de traducción para reanudarla.</string>
+    <string name="toWhatLanguague">-></string>
+    <string name="unable_to_download_language">No se pudo descargar el lenguaje</string>
+
+
+    <!-- Configuración y Sistema -->
+    <string name="general">General</string>
+    <string name="general_settings">Ajustes generales</string>
+    <string name="locale_settings">Idioma de la aplicación</string>
+    <string name="provider_lang_settings">Idiomas del proveedor</string>
+    <string name="theme_key">theme_key</string>
+    <string name="theme">Tema</string>
+    <string name="primary_color_key">primary_color_key</string>
+    <string name="primary_color_settings">Color principal</string>
+    <string name="library_display_mode">Estilo de la biblioteca</string>
+    <string name="grid_view">Cuadrícula</string>
+    <string name="list_view">Lista</string>
+    <string name="show_app_updates">Mostrar actualizaciones</string>
+    <string name="show_app_updates_desc">Buscar actualizaciones automáticamente al iniciar</string>
+    <string name="external_reader">Lector externo</string>
+    <string name="external_reader_desc">Utilizar una aplicación externa para leer</string>
+    <string name="remove_bloat">Eliminar contenido innecesario</string>
+    <string name="remove_bloat_desc">Elimina el título y traductor de las páginas (aumenta carga)</string>
+    <string name="check_for_update">Buscar actualizaciones</string>
+    <string name="new_update_found_format">¡Nueva actualización disponible!\n %s -> %s</string>
+    <string name="no_update_found">No hay actualización</string>
+
+    <!-- Copias de Seguridad (Backup) -->
+    <string name="backup_settings">Copia de seguridad</string>
+    <string name="restore_settings">Restaurar datos desde copia de seguridad</string>
+    <string name="backup_success">Copia de seguridad realizada con éxito</string>
+    <string name="backup_failed">Fallo al respaldar, verifique permisos de almacenamiento</string>
+    <string name="restore_success">Copia de seguridad cargada con éxito</string>
+    <string name="restore_failed_format" formatted="true">Error al restaurar desde %s</string>
+    <string name="backup_failed_error_format">Error al realizar copia de seguridad %s</string>
+
+    <!-- Filtros y Ordenamiento -->
+    <string name="home_title_text">Explorar</string>
+    <string name="mainpage_filter">Filtro</string>
+    <string name="filter_dialog_filter">Aplicar</string>
+    <string name="filter_dialog_sort_by">Ordenar por</string>
+    <string name="filter_dialog_order_by">Ordenar por:</string>
+    <string name="filter_dialog_general">General</string>
+    <string name="filter_dialog_genre">Género</string>
+    <string name="mainpage_sort_by_button_text">Ordenar</string>
+    <string name="sort_apply">Aplicar</string>
+    <string name="sort_cancel">Cancelar</string>
+    <string name="sort_downloads_descript">Ordenar descargas</string>
+    <string name="default_sort">Por defecto</string>
+    <string name="recently_sort">Abierto recientemente</string>
+    <string name="alpha_sort">Alfabético</string>
+    <string name="alpha_sort_az">Alfabético (A-Z)</string>
+    <string name="alpha_sort_za">Alfabético (Z-A)</string>
+    <string name="download_sort">Número de descargas</string>
+    <string name="download_sort_hl">Descargas (mayor a menor)</string>
+    <string name="download_sort_lh">Descargas (menor a mayor)</string>
+    <string name="download_perc">Porcentaje descargado</string>
+    <string name="download_perc_hl">Descargado (mayor a menor)</string>
+    <string name="download_perc_lh">Descargado (menor a mayor)</string>
+    <string name="recently_updated_sort">Actualizado recientemente</string>
+    <string name="chapter_sort">Capítulo</string>
+
+    <!-- Errores y Estados -->
+    <string name="loading">Cargando…</string>
+    <string name="loading_format" formatted="true">Cargando %s…</string>
+    <string name="reload_error">Error de conexión.</string>
+    <string name="error_loading_novel">Error al cargar la novela</string>
+    <string name="error_loading_chapter">Error al cargar el capítulo</string>
+    <string name="no_chapters">Sin capítulos</string>
+    <string name="no_more_chapters">No hay más capítulos</string>
+    <string name="error_outside_chapter">Posición inválida (fuera del capítulo)</string>
+    <string name="nothing_read_recently">No has leído nada recientemente</string>
+    <string name="ongoing">En curso</string>
+    <string name="paused">Pausado</string>
+    <string name="stopped">Detenido</string>
+    <string name="failed">Falló</string>
+    <string name="dropped">Abandonado</string>
+    <string name="stubbed">Recortado (Stubbed)</string>
+    <string name="long_download_time">Cuidado, esta fuente es lenta. Se recomienda lectura en línea.</string>
+    <string name="quickstream_novel_text">Leer en línea</string>
+    <string name="stream_read">Leer en línea</string>
+    <string name="permission_error">Se nececitan permisos</string>
+    <string name="unable_to_inflate">ERROR: la ui no se creó correctamente, por favor REPORTAR INMEDIATAMENTE %s</string>
+
+
+    <!-- Diálogos de Confirmación -->
+    <string name="remove_from_history_format">¿Estás seguro de que quieres eliminar %s del historial?</string>
+    <string name="permanently_delete_format">¿Estás seguro de eliminar permanentemente %s?</string>
+    <string name="remove_all_history">¿Estás seguro? Se perderá todo el historial.</string>
+
+    <!-- Sistema y Miscelánea -->
+    <string name="toast_copied">¡Copiado al portapapeles!</string>
+    <string name="clipboard_too_large">Texto demasiado largo para el portapapeles.</string>
+    <string name="clipboard_permission_error">Error de permisos al acceder al portapapeles.</string>
+    <string name="clipboard_unknown_error">Error desconocido al copiar datos.</string>
+    <string name="show_log_cat">Ver registros (Logcat) 🐈</string>
+    <string name="unread">Sin leer</string>
+    <string name="bookmark">Marcador</string>
+    <string name="read">Leído</string>
+    <string name="bookmarks">Marcadores</string>
+    <string name="monke_eating">Mono comiendo</string>
+    <string name="user_image_avatar">Avatar de usuario</string>
+    <string name="browse_list_icon">Icono de lista</string>
+    <string name="reset_value">Restaurar valores por defecto</string>
+    <string name="copylog">Copiar registro</string>
+    <string name="history">Historial</string>
+    <string name="explore">Explorar</string>
+    <string name="provider_list_key">provider_list</string>
+    <string name="search_providers_list_key">search_providers_list</string>
+    <string name="auto_update_key">auto_update</string>
+    <string name="external_reader_key">external_reader</string>
+    <string name="remove_external_key">remove_external</string>
+    <string name="manual_check_update_key">manual_check_update</string>
+    <string name="backup_key">backup_key</string>
+    <string name="rating_format_key">rating_format</string>
+    <string name="grid_format_key">grid_format</string>
+    <string name="download_open_action">Abrir</string>
+    <string name="download_read_action">Leer</string>
+    <string name="download_update_action">Actualizar</string>
+    <string name="download_delete_action">Borrar</string>
+    <string name="reviews_to_top">Arriba</string>
+    <string name="completed">Completado</string>
+    <string name="more_info">Más información</string>
+    <string name="connection_timeout">Tiempo de espera agotado Por favor, inténtalo de nuevo más tarde.</string>
+    <string name="cannot_conect">No se pudo conectar al servidor, inténtalo de nuevo más tarde.</string>
+    <string name="error_loading">"Error al cargar, por favor inténtalo de nuevo más tarde."</string>
+    <string name="operation_no_implemented">" Esta operación no está implementada."</string>
+    <string name="conection_error">Error de conexión.</string>
+    <string name="unknown">Desconocido</string>
+    <string name="history_open_link">Abrir enlace</string>
+    <string name="history_open_link_title">Abrir página web</string>
+    <string name="history_open_link_hint">https://…</string>
+    <string name="history_open_link_invalid">Enlace no válido</string>
+    <string name="history_open_link_loading">Cargando página…</string>
+    <string name="history_open_link_error">No se pudo cargar la página</string>
+    <string name="history_save_to_library">Guardar en la biblioteca</string>
+    <string name="library_categories_title">Establecer categorías</string>
+    <string name="library_categories_edit">Editar</string>
+
+    <!-- Pestaña Sustituir -->
+    <string name="replace_tab">Sustituir</string>
+    <string name="replace_description">Sustituye palabras o frases en el texto de esta novela. Corrige errores antes de traducir, o adapta términos después de traducir. Deja el segundo campo vacío para eliminar el término. Si varias novelas comparten universo, copia las sustituciones de una a otra en vez de repetirlas.</string>
+    <string name="replace_original_hint">Término original</string>
+    <string name="replace_replacement_hint">Sustituir por</string>
+    <string name="replace_when">Cuándo sustituir</string>
+    <string name="replace_before">Antes de traducir</string>
+    <string name="replace_after">Después de traducir</string>
+    <string name="replace_timing_help">Antes: el traductor recibe el texto ya corregido (p. ej. arreglar algo que lo confundiría). Después: se aplica sobre el texto traducido (p. ej. Rodrgo → Rodrigo). Si no hay traducción activa, ambas se aplican al texto original.</string>
+    <string name="replace_add">Añadir</string>
+    <string name="replace_save">Guardar cambios</string>
+    <string name="replace_cancel">Cancelar</string>
+    <string name="replace_empty">Aún no hay sustituciones</string>
+    <string name="replace_saved_note">Los cambios se aplican la próxima vez que abras un capítulo en el lector.</string>
+    <string name="replace_original_required">Escribe el término a sustituir</string>
+    <string name="replace_same_text">Ambos textos son iguales</string>
+    <string name="replace_delete">Eliminar sustitución</string>
+    <string name="replace_item_empty_value">(eliminar)</string>
+    <string name="replace_pick_search_hint">Buscar en la biblioteca…</string>
+    <string name="replace_pick_no_results">Ninguna novela de la biblioteca coincide</string>
+    <string name="replace_copy_to">Copiar a…</string>
+    <string name="replace_import_from">Importar de…</string>
+    <string name="replace_copy_title">Copiar estas sustituciones a (biblioteca)</string>
+    <string name="replace_import_title">Importar sustituciones de (biblioteca)</string>
+    <string name="replace_copy_no_novels">No hay otras novelas en la biblioteca a las que copiar</string>
+    <string name="replace_import_no_novels">Ninguna otra novela de la biblioteca tiene sustituciones guardadas</string>
+    <plurals name="replace_copy_done">
+        <item quantity="one">Sustituciones copiadas a %1$d novela</item>
+        <item quantity="other">Sustituciones copiadas a %1$d novelas</item>
+    </plurals>
+    <string name="replace_copy_nothing_new">Esas novelas ya tenían las mismas sustituciones</string>
+    <string name="replace_import_done">Importadas: %1$d nuevas, %2$d actualizadas</string>
+    <string name="replace_import_nothing_new">Esta novela ya tenía esas sustituciones</string>
+    <string name="replace_reader_novel">Sustituciones de: %s</string>
+    <string name="replace_reader_note">Al cerrar esta pantalla, los cambios se aplican a los capítulos abiertos. Se guardan para este libro, así que también valen cuando vuelvas a abrirlo.</string>
+    <string name="replace_applying">Aplicando sustituciones</string>
+    <string name="translation_channel_name">Traducción de capítulos</string>
+    <string name="translation_channel_description">Se muestra mientras el lector traduce un capítulo en segundo plano</string>
+    <string name="translation_in_background">Traduciendo en segundo plano</string>
+
+    <!-- Menú lateral de términos sin traducir del lector (se abre deslizando de izquierda a derecha) -->
+    <string name="untranslated_title">Términos sin traducir</string>
+    <string name="untranslated_close">Cerrar</string>
+    <string name="untranslated_term_edit">Escribir traducción</string>
+    <string name="untranslated_count_format">×%d</string>
+    <string name="untranslated_searching">Buscando traducción…</string>
+    <string name="untranslated_proposal">Propuesta: %s</string>
+    <string name="untranslated_write">Toca para escribir la traducción</string>
+    <string name="untranslated_saved_row">Añadido a Sustituir: %s</string>
+    <string name="untranslated_none">No se han encontrado términos sin traducir en este capítulo</string>
+    <string name="untranslated_not_translated">Este capítulo no tiene una traducción activa: la lista de términos sin traducir está disponible cuando el capítulo esté traducido</string>
+    <string name="untranslated_dialog_hint">Traducción al español</string>
+    <string name="untranslated_dialog_note">Se añadirá a Sustituir → Después de traducir, y el capítulo se corregirá en cuanto aceptes.</string>
+    <string name="untranslated_accept">Añadir a Sustituir</string>
+    <string name="untranslated_saved">Sustitución añadida: %1$s → %2$s</string>
+    <string name="untranslated_need_translation">Escribe la traducción antes de aceptar</string>
+</resources>

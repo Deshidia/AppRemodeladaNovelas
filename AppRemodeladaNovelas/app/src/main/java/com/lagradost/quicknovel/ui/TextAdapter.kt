@@ -1,0 +1,1151 @@
+package com.lagradost.quicknovel.ui
+
+import android.content.res.ColorStateList
+import android.graphics.Typeface
+import android.text.Spannable
+import android.text.SpannableString
+import android.text.method.LinkMovementMethod
+import android.util.TypedValue
+import android.annotation.SuppressLint
+import android.view.ActionMode
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuItem
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
+import android.view.ViewGroup
+import kotlin.math.abs
+import android.widget.ProgressBar
+import android.widget.TextView
+import androidx.core.text.getSpans
+import androidx.core.view.isVisible
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewbinding.ViewBinding
+import com.lagradost.quicknovel.ChapterLoadSpanned
+import com.lagradost.quicknovel.ChapterOverscrollSpanned
+import com.lagradost.quicknovel.ChapterStartSpanned
+import com.lagradost.quicknovel.CommonActivity.showToast
+import com.lagradost.quicknovel.FailedSpanned
+import com.lagradost.quicknovel.LoadingSpanned
+import com.lagradost.quicknovel.MLException
+import com.lagradost.quicknovel.QuickBook
+import com.lagradost.quicknovel.R
+import com.lagradost.quicknovel.ReadActivityViewModel
+import com.lagradost.quicknovel.SpanDisplay
+import com.lagradost.quicknovel.TTSHelper
+import com.lagradost.quicknovel.TextSpan
+import com.lagradost.quicknovel.databinding.SingleFailedBinding
+import com.lagradost.quicknovel.databinding.SingleFinishedChapterBinding
+import com.lagradost.quicknovel.databinding.SingleImageBinding
+import com.lagradost.quicknovel.databinding.SingleLoadBinding
+import com.lagradost.quicknovel.databinding.SingleLoadingBinding
+import com.lagradost.quicknovel.databinding.SingleOverscrollChapterBinding
+import com.lagradost.quicknovel.databinding.SingleSeparatorBinding
+import com.lagradost.quicknovel.databinding.SingleTextBinding
+import com.lagradost.quicknovel.mvvm.logError
+import com.lagradost.quicknovel.util.Apis
+import com.lagradost.quicknovel.util.UIHelper
+import com.lagradost.quicknovel.util.UIHelper.popupMenu
+import com.lagradost.quicknovel.util.UIHelper.showImage
+import com.lagradost.quicknovel.util.UIHelper.systemFonts
+import com.lagradost.quicknovel.util.toPx
+import com.lagradost.quicknovel.ui.roundedbg.SEARCH_ANNOTATION
+import com.lagradost.quicknovel.ui.roundedbg.SEARCH_CURRENT_ANNOTATION
+import com.lagradost.quicknovel.ui.roundedbg.USER_MARK_ANNOTATION
+import io.noties.markwon.image.AsyncDrawable
+import io.noties.markwon.image.AsyncDrawableSpan
+import java.io.File
+
+
+const val DRAW_DRAWABLE = 1
+const val DRAW_TEXT = 0
+const val DRAW_LOADING = 2
+const val DRAW_FAILED = 3
+const val DRAW_CHAPTER = 4
+const val DRAW_LOAD = 5
+const val DRAW_OVERSCROLL = 6
+const val DRAW_SEPARATOR = 7
+
+
+data class ScrollVisibilityItem(
+    val adapterPosition: Int,
+    val viewHolder: RecyclerView.ViewHolder?,
+)
+
+/*
+data class ScrollVisibility(
+    val firstVisible: ScrollVisibilityItem,
+    val firstFullyVisible: ScrollVisibilityItem,
+    val lastVisible: ScrollVisibilityItem,
+    val lastFullyVisible: ScrollVisibilityItem,
+
+    val screenTop: Int,
+    val screenBottom: Int,
+    val screenTopBar: Int,
+)*/
+
+/** a scroll index specifies exactly where you are inside a book SHOULD NOT BE SAVED
+ * as ScrollIndex innerIndex should be derived from char
+ *
+ * index = chapter index
+ * innerIndex = what text block, innerIndex *can* be derived from char
+ * char = what character in index, not local
+ */
+data class ScrollIndex(
+    val index: Int,
+    val innerIndex: Int,
+    val char: Int,
+)
+
+data class ScrollVisibilityIndex(
+    // first in the recyclerview
+    val firstInMemory: TextVisualLine,
+    // last in the recyclerview
+    val lastInMemory: TextVisualLine,
+
+    // first line you can clearly see
+    val firstFullyVisible: TextVisualLine?,
+    // first line you can't clearly see
+    val lastHalfVisible: TextVisualLine?,
+
+    // first line after the bottom bar you can see clearly
+    val firstFullyVisibleUnderLine: TextVisualLine?
+)
+
+/** this represents a single text line split by the layout, NOT newlines,
+ * SHOULD not be stored in any way as layout change or scroll with invalidate the values */
+data class TextVisualLine(
+    // chars are in relation to index, not span
+    val startChar: Int,
+    val endChar: Int,
+
+    val index: Int,
+    val innerIndex: Int,
+
+    val top: Int,
+    val bottom: Int,
+)
+
+fun TextVisualLine.toScroll(): ScrollIndex {
+    return ScrollIndex(index = this.index, innerIndex = this.innerIndex, char = this.startChar)
+}
+
+/** Una coincidencia de la búsqueda del panel de términos, en coordenadas locales del
+ * párrafo [innerIndex] ([start, end) sobre el texto mostrado). */
+data class SearchHighlight(
+    val innerIndex: Int,
+    val start: Int,
+    val end: Int,
+)
+
+/**
+ * Pinta (sustituyendo cualquier otra) las coincidencias de búsqueda del panel en el
+ * TextView con [SEARCH_ANNOTATION] / [SEARCH_CURRENT_ANNOTATION], que son las que dibuja
+ * [com.lagradost.quicknovel.ui.roundedbg.RoundedBgTextView]. Lista vacía = solo limpia las
+ * que hubiera. Cada coincidencia mantiene su subrayado aunque el párrafo se re-vincule al
+ * hacer scroll, porque los rangos viven en el adapter.
+ */
+fun setSearchHighlightText(tv: TextView, ranges: List<IntRange>, current: IntRange?) {
+    try {
+        val spannable: Spannable = SpannableString(tv.text)
+        val length = spannable.length
+        var changed = false
+        for (s in spannable.getSpans<android.text.Annotation>(0, length)) {
+            if (s.value == SEARCH_ANNOTATION || s.value == SEARCH_CURRENT_ANNOTATION) {
+                spannable.removeSpan(s)
+                changed = true
+            }
+        }
+
+        for (r in ranges) {
+            val from = r.first.coerceIn(0, length)
+            val to = (r.last + 1).coerceIn(0, length)
+            if (to > from) {
+                spannable.setSpan(
+                    android.text.Annotation("", SEARCH_ANNOTATION),
+                    from,
+                    to,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                changed = true
+            }
+        }
+
+        if (current != null) {
+            val from = current.first.coerceIn(0, length)
+            val to = (current.last + 1).coerceIn(0, length)
+            if (to > from) {
+                spannable.setSpan(
+                    android.text.Annotation("", SEARCH_CURRENT_ANNOTATION),
+                    from,
+                    to,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                changed = true
+            }
+        }
+
+        // no re render an untouched textview
+        if (changed) {
+            tv.setText(spannable, TextView.BufferType.SPANNABLE)
+        }
+    } catch (t: Throwable) {
+        logError(t)
+    }
+}
+
+fun removeHighLightedText(tv: TextView) {
+    val wordToSpan: Spannable = SpannableString(tv.text)
+
+    val spans = wordToSpan.getSpans<android.text.Annotation>(0, tv.text.length)
+    var shouldUpdate = false
+    for (s in spans) {
+        if (s.value == "rounded") {
+            wordToSpan.removeSpan(s)
+            shouldUpdate = true
+        }
+    }
+
+    // no need to re render an untouched textview
+    if (shouldUpdate) {
+        tv.setText(wordToSpan, TextView.BufferType.SPANNABLE)
+    }
+}
+
+fun setHighLightedText(tv: TextView, start: Int, end: Int) {
+    try {
+        val wordToSpan: Spannable = SpannableString(tv.text)
+        val length = tv.text.length
+        val spans = wordToSpan.getSpans<android.text.Annotation>(0, length)
+
+        // remove previous HighLighted text
+        for (s in spans) {
+            if (s.value == "rounded")
+                wordToSpan.removeSpan(s)
+        }
+
+        wordToSpan.setSpan(
+            android.text.Annotation("", "rounded"),
+            minOf(maxOf(start, 0), length),
+            minOf(maxOf(end, 0), length),
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+
+        tv.setText(wordToSpan, TextView.BufferType.SPANNABLE)
+    } catch (t: Throwable) {
+        logError(t)
+    }
+}
+
+/** Pone (sustituyendo cualquier otro) el subrayado del usuario en [start, end) del TextView. */
+fun setUserMarkText(tv: TextView, start: Int, end: Int) {
+    try {
+        val spannable: Spannable = SpannableString(tv.text)
+        val length = spannable.length
+        for (s in spannable.getSpans<android.text.Annotation>(0, length)) {
+            if (s.value == USER_MARK_ANNOTATION) spannable.removeSpan(s)
+        }
+
+        val from = start.coerceIn(0, length)
+        val to = end.coerceIn(0, length)
+        if (to > from) {
+            spannable.setSpan(
+                android.text.Annotation("", USER_MARK_ANNOTATION),
+                from,
+                to,
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        tv.setText(spannable, TextView.BufferType.SPANNABLE)
+    } catch (t: Throwable) {
+        logError(t)
+    }
+}
+
+private const val MENU_USER_MARK_ADD = 0x7501
+private const val MENU_USER_MARK_REMOVE = 0x7502
+
+const val CONFIG_COLOR = 1 shl 0
+const val CONFIG_FONT = 1 shl 1
+const val CONFIG_SIZE = 1 shl 2
+const val CONFIG_FONT_BOLD = 1 shl 3
+const val CONFIG_FONT_ITALIC = 1 shl 4
+const val CONFIG_BG_COLOR = 1 shl 5
+const val CONFIG_PADDING = 1 shl 6
+
+// this uses val to make it explicit copy because of lazy properties
+data class TextConfig(
+    val toolbarHeight: Int,
+    val textColor: Int,
+    val textSize: Int,
+    val textFont: String,
+    val defaultFont: Typeface,
+    val backgroundColor: Int,
+    val bionicReading: Boolean,
+    val isTextSelectable: Boolean,
+    /** Vertical text padding in dp */
+    val verticalPadding: Float,
+) {
+    private val fontFile: File? by lazy {
+        if (textFont == "") null else systemFonts.firstOrNull { it.name == textFont }
+    }
+
+    private val cachedFont: Typeface by lazy {
+        fontFile?.let { file -> Typeface.createFromFile(file) } ?: defaultFont
+    }
+
+    private fun setTextFont(textView: TextView, flags: Int) {
+        textView.setTypeface(cachedFont, flags)
+    }
+    /*private fun setTextFont(textView: TextView) {
+        if (cachedFont != null) textView.typeface = cachedFont
+
+        val file = fontFile
+        cachedFont = if (file == null) {
+            defaultFont
+            // ResourcesCompat.getFont(textView.context, R.font.google_sans)
+        } else {
+            Typeface.createFromFile(file)
+        }
+        textView.typeface = cachedFont
+    }*/
+
+    private fun setTextSize(textView: TextView) {
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize.toFloat())
+    }
+
+    private fun setTextPadding(textView: TextView) {
+        val padding = this.verticalPadding.toPx.toInt()
+        textView.setPadding(0, padding, 0, padding)
+    }
+
+    private fun setTextColor(textView: TextView) {
+        textView.setTextColor(textColor)
+    }
+
+    private fun setBgTextColor(textView: TextView) {
+        textView.setTextColor(backgroundColor)
+    }
+
+    fun setArgs(progressBar: ProgressBar) {
+        progressBar.progressTintList = ColorStateList.valueOf(textColor)
+        progressBar.indeterminateTintList = ColorStateList.valueOf(textColor)
+    }
+
+    fun setArgs(textView: TextView, args: Int) {
+        if ((args and CONFIG_COLOR) != 0) {
+            setTextColor(textView)
+        }
+        if ((args and CONFIG_BG_COLOR) != 0) {
+            setBgTextColor(textView)
+        }
+        if ((args and CONFIG_FONT) != 0) {
+            val bold = (args and CONFIG_FONT_BOLD) != 0
+            val italic = (args and CONFIG_FONT_ITALIC) != 0
+            val textType = when (bold to italic) {
+                false to false -> Typeface.NORMAL
+                true to false -> Typeface.BOLD
+                false to true -> Typeface.ITALIC
+                true to true -> Typeface.BOLD_ITALIC
+                else -> throw NotImplementedError()
+            }
+            setTextFont(
+                textView, textType
+            )
+        }
+        if ((args and CONFIG_SIZE) != 0) {
+            setTextSize(textView)
+        }
+        if ((args and CONFIG_PADDING) != 0) {
+            setTextPadding(textView)
+        }
+    }
+}
+
+class TextAdapter(
+    private val viewModel: ReadActivityViewModel,
+    var config: TextConfig
+) :
+    NoStateAdapter<SpanDisplay>(DiffCallback()) {
+    private var currentTTSLine: TTSHelper.TTSLine? = null
+
+    fun changeHeight(height: Int): Boolean {
+        if (config.toolbarHeight == height) return false
+        config = config.copy(toolbarHeight = height)
+        return true
+    }
+
+    fun changeBionicReading(to: Boolean): Boolean {
+        if (config.bionicReading == to) return false
+        config = config.copy(bionicReading = to)
+        return true
+    }
+
+    fun changeColor(color: Int): Boolean {
+        if (config.textColor == color) return false
+        config = config.copy(textColor = color)
+        return true
+    }
+
+    fun changeSize(size: Int): Boolean {
+        if (config.textSize == size) return false
+        config = config.copy(textSize = size)
+        return true
+    }
+
+    fun changeTextVerticalPadding(padding: Float): Boolean {
+        if (config.verticalPadding == padding) return false
+        config = config.copy(verticalPadding = padding)
+        return true
+    }
+
+    fun changeFont(font: String): Boolean {
+        if (config.textFont == font) return false
+        config = config.copy(textFont = font)
+        return true
+    }
+
+    fun changeBackgroundColor(color: Int): Boolean {
+        if (config.backgroundColor == color) return false
+        config = config.copy(backgroundColor = color)
+        return true
+    }
+
+    fun changeTextSelectable(isTextSelectable: Boolean): Boolean {
+        if (config.isTextSelectable == isTextSelectable) return false
+        config = config.copy(isTextSelectable = isTextSelectable)
+        return true
+    }
+
+    override fun onCreateCustomContent(
+        parent: ViewGroup,
+        viewType: Int
+    ): ViewHolderState<Any> {
+        val inflater = LayoutInflater.from(parent.context)
+        val binding: ViewBinding = when (viewType) {
+            DRAW_TEXT -> SingleTextBinding.inflate(inflater, parent, false)
+            DRAW_DRAWABLE -> SingleImageBinding.inflate(inflater, parent, false)
+            DRAW_LOADING -> SingleLoadingBinding.inflate(inflater, parent, false)
+            DRAW_FAILED -> SingleFailedBinding.inflate(inflater, parent, false)
+            DRAW_CHAPTER -> SingleFinishedChapterBinding.inflate(inflater, parent, false)
+            DRAW_LOAD -> SingleLoadBinding.inflate(inflater, parent, false)
+            DRAW_OVERSCROLL -> SingleOverscrollChapterBinding.inflate(inflater, parent, false)
+            DRAW_SEPARATOR -> SingleSeparatorBinding.inflate(inflater, parent, false)
+            else -> throw NotImplementedError()
+        }
+
+        return ViewHolderState(binding)
+    }
+
+    /** updates new onbind calls, but not current */
+    fun updateTTSLine(line: TTSHelper.TTSLine?) {
+        currentTTSLine = line
+    }
+
+    // coincidencias de la búsqueda del panel de términos: párrafo (innerIndex) -> rangos locales
+    private var searchHighlights: Map<Int, List<IntRange>> = emptyMap()
+    private var searchCurrentInnerIndex = -1
+    private var searchCurrentRange: IntRange? = null
+
+    // se captura para saber qué párrafos están en pantalla al cambiar el subrayado
+    private var attachedRecyclerView: RecyclerView? = null
+
+    override fun onViewAttachedToWindow(holder: ViewHolderState<Any>) {
+        super.onViewAttachedToWindow(holder)
+        if (attachedRecyclerView == null) {
+            attachedRecyclerView = holder.itemView.parent as? RecyclerView
+        }
+    }
+
+    /**
+     * Sustituye las coincidencias subrayadas en el texto (la [current] se pinta además con
+     * tinte). Solo re-vincula los párrafos en pantalla: el estado vive aquí, así que los que
+     * entren después ya se subrayan al re-vincularse en el bind.
+     */
+    fun updateSearchHighlights(highlights: List<SearchHighlight>, current: SearchHighlight?) {
+        val oldKeys = buildSet {
+            addAll(searchHighlights.keys)
+            if (searchCurrentInnerIndex >= 0) add(searchCurrentInnerIndex)
+        }
+        searchHighlights = highlights.groupBy({ it.innerIndex }, { it.start until it.end })
+        searchCurrentInnerIndex = current?.innerIndex ?: -1
+        searchCurrentRange = current?.let { it.start until it.end }
+
+        val keys = buildSet {
+            addAll(oldKeys)
+            addAll(searchHighlights.keys)
+            if (searchCurrentInnerIndex >= 0) add(searchCurrentInnerIndex)
+        }
+        if (keys.isEmpty()) return
+
+        val layoutManager = attachedRecyclerView?.layoutManager as? LinearLayoutManager
+        val first = layoutManager?.findFirstVisibleItemPosition() ?: -1
+        val last = layoutManager?.findLastVisibleItemPosition() ?: -1
+        if (first >= 0 && last >= first) {
+            for (position in first..last) {
+                val item = getItemOrNull(position) ?: continue
+                if (item is TextSpan && item.innerIndex in keys) notifyItemChanged(position)
+            }
+        } else {
+            // sin recycler conocido (aún sin scroll): re-vincula todo, caso raro
+            for (position in 0 until itemCount) {
+                val item = getItem(position)
+                if (item is TextSpan && item.innerIndex in keys) notifyItemChanged(position)
+            }
+        }
+    }
+
+    /** Subraya en este bloque las coincidencias de búsqueda que le correspondan. */
+    private fun updateSearchHighlight(binding: ViewBinding, span: TextSpan) {
+        if (binding !is SingleTextBinding) return
+        val ranges = searchHighlights[span.innerIndex]
+        val current = if (span.innerIndex == searchCurrentInnerIndex) searchCurrentRange else null
+        setSearchHighlightText(binding.root, ranges.orEmpty(), current)
+    }
+
+    /*fun getViewOffset(scrollVisibility: ScrollVisibilityItem, char: Int): Int? {
+        try {
+            if (scrollVisibility.adapterPosition < 0 || scrollVisibility.adapterPosition >= itemCount) return null
+            //val item = getItem(scrollVisibility.index)
+            val viewHolder = scrollVisibility.viewHolder
+            if (viewHolder !is TextAdapterHolder) return null
+            val binding = viewHolder.binding
+            if (binding !is SingleTextBinding) return null
+            val outLocation = IntArray(2)
+            binding.root.getLocationInWindow(outLocation)
+            binding.root.layout.apply {
+                for (i in 0 until lineCount) {
+                    if (getLineEnd(i) >= char) {
+                        //binding.root.getLocationInWindow(outLocation)
+                        //val (_, y) = outLocation
+
+                        return getLineTop(i)
+                    }
+                }
+            }
+        } catch (_ : Throwable) { }
+        return null
+    }*/
+
+    /* private fun transformIndexToScrollIndex(
+         scrollVisibility: ScrollVisibilityItem,
+         screenTop: Int,
+         screenBottom: Int
+     ): ScrollIndex? {
+         try {
+             if (scrollVisibility.adapterPosition < 0 || scrollVisibility.adapterPosition >= itemCount) return null
+             val item = getItem(scrollVisibility.adapterPosition)
+             val viewHolder = scrollVisibility.viewHolder
+
+             var firstVisibleChar: Int? = null
+             var firstInvisibleChar: Int? = null
+             if (viewHolder is TextAdapterHolder) {
+                 val binding = viewHolder.binding
+                 if (binding is SingleTextBinding) {
+                     val outLocation = IntArray(2)
+                     binding.root.getLocationInWindow(outLocation)
+                     val (_, y) = outLocation
+                     binding.root.layout.apply {
+                         for (i in 0 until lineCount) {
+                             val top = y + getLineTop(i)
+                             val bottom = y + getLineBottom(i)
+                             if (top < screenBottom && top > screenTop && bottom < screenBottom && bottom > screenTop) {
+                                 if (firstVisibleChar == null) firstVisibleChar = getLineStart(i)
+                                 if (firstInvisibleChar != null) break
+                             } else {
+                                 if (firstInvisibleChar == null) firstInvisibleChar = getLineStart(i)
+                                 if (firstVisibleChar != null) break
+                             }
+                         }
+                     }
+                 }
+             }
+
+             return ScrollIndex(
+                 index = item.index,
+                 innerIndex = item.innerIndex,
+                 firstVisibleChar = firstVisibleChar,
+                 firstInvisibleChar = firstInvisibleChar
+             )
+         } catch (_ : Throwable) {
+             return null
+         }
+     }*/
+
+
+    fun getLines(scrollVisibility: ScrollVisibilityItem): List<TextVisualLine> {
+        try {
+            if (scrollVisibility.adapterPosition < 0 || scrollVisibility.adapterPosition >= itemCount) return emptyList()
+            val viewHolder = scrollVisibility.viewHolder
+            if (viewHolder !is ViewHolderState<*>) return emptyList()
+
+            val binding = viewHolder.view
+            val item = getItem(scrollVisibility.adapterPosition)
+
+            // Case 1: Image
+            if (binding is SingleImageBinding && item is TextSpan) {
+                val outLocation = IntArray(2)
+                binding.root.getLocationInWindow(outLocation)
+                val y = outLocation[1]
+
+                return listOf(
+                    TextVisualLine(
+                        startChar = item.start,
+                        endChar = item.start + 1,
+                        innerIndex = item.innerIndex,
+                        index = item.index,
+                        top = y,
+                        bottom = y + binding.root.height
+                    )
+                )
+            }
+
+            // Case 2: Text
+            if (binding is SingleTextBinding && item is TextSpan) {
+                val outLocation = IntArray(2)
+                binding.root.getLocationInWindow(outLocation)
+                val y = outLocation[1] + binding.root.paddingTop
+
+                val list = arrayListOf<TextVisualLine>()
+                binding.root.layout?.apply {
+                    for (i in 0 until lineCount) {
+                        list.add(
+                            TextVisualLine(
+                                startChar = item.start + getLineStart(i),
+                                endChar = item.start + getLineEnd(i),
+                                innerIndex = item.innerIndex,
+                                index = item.index,
+                                top = getLineTop(i) + y,
+                                bottom = getLineBottom(i) + y
+                            )
+                        )
+                    }
+                }
+                return list
+            }
+
+            /* Other cases (Loading, Separators, etc.) */
+            return emptyList()
+        } catch (t: Throwable) {
+            return emptyList()
+        }
+    }
+
+    /*fun getIndex(data: ScrollVisibility): ScrollVisibilityIndex? {
+        return ScrollVisibilityIndex(
+            firstVisible = transformIndexToScrollIndex(
+                data.firstVisible,
+                data.screenTop,
+                data.screenBottom
+            ) ?: return null,
+            firstFullyVisible = transformIndexToScrollIndex(
+                data.firstFullyVisible,
+                data.screenTop,
+                data.screenBottom
+            ) ?: return null,
+            lastFullyVisible = transformIndexToScrollIndex(
+                data.lastFullyVisible,
+                data.screenTop,
+                data.screenBottom
+            ) ?: return null,
+            lastVisible = transformIndexToScrollIndex(
+                data.lastVisible,
+                data.screenTop,
+                data.screenBottom
+            ) ?: return null,
+        )
+    }*/
+
+    override fun onBindContent(holder: ViewHolderState<Any>, item: SpanDisplay, position: Int) {
+        val binding = holder.view
+
+        when (item) {
+            is TextSpan -> {
+                this.bindText(binding, item, config)
+                this.updateSearchHighlight(binding, item)
+                this.updateUserMark(binding, item)
+                // because we bind text here we know that it will be cleared and thus
+                // we do not have to update it with null
+                if (currentTTSLine != null)
+                    this.updateTTSLine(binding, item, currentTTSLine)
+            }
+
+            is LoadingSpanned -> {
+                this.bindLoading(binding, item)
+            }
+
+            is FailedSpanned -> {
+                this.bindFailed(binding, item)
+            }
+
+            is ChapterStartSpanned -> {
+                this.bindChapter(binding, item)
+            }
+
+            is ChapterLoadSpanned -> {
+                this.bindLoadChapter(binding, item)
+            }
+
+            is ChapterOverscrollSpanned -> {
+                this.bindOverscrollChapter(binding, item)
+            }
+
+            else -> throw NotImplementedError()
+        }
+        setConfig(binding, config)
+    }
+
+    // a full line of these characters is often used as a SEPARATOR
+    val separatorRegex = Regex("[=\\-_\\s━*]*")
+
+    override fun customContentViewType(item: SpanDisplay): Int {
+        return when (item) {
+            is TextSpan -> {
+                if (item.text.matches(separatorRegex)) {
+                    DRAW_SEPARATOR
+                } else if (item.text.getSpans<AsyncDrawableSpan>(0, item.text.length)
+                        .isNotEmpty()
+                ) {
+                    DRAW_DRAWABLE
+                } else {
+                    DRAW_TEXT
+                }
+            }
+
+            is LoadingSpanned -> {
+                DRAW_LOADING
+            }
+
+            is FailedSpanned -> {
+                DRAW_FAILED
+            }
+
+            is ChapterStartSpanned -> {
+                DRAW_CHAPTER
+            }
+
+            is ChapterLoadSpanned -> {
+                DRAW_LOAD
+            }
+
+            is ChapterOverscrollSpanned -> {
+                DRAW_OVERSCROLL
+            }
+
+            else -> throw NotImplementedError()
+        }
+    }
+
+    override fun getItemId(position: Int): Long {
+        return getItem(position).id
+    }
+
+    private fun bindLoading(binding: ViewBinding, obj: LoadingSpanned) {
+        if (binding !is SingleLoadingBinding) return
+        binding.text.setText(obj.text)
+        binding.root.setOnClickListener {
+            viewModel.switchVisibility()
+        }
+    }
+
+    private fun bindFailed(binding: ViewBinding, obj: FailedSpanned) {
+        if (binding !is SingleFailedBinding) return
+
+        binding.root.setText(obj.reason)
+
+        binding.root.setOnClickListener {
+            if (obj.cause == null) {
+                viewModel.switchVisibility()
+                return@setOnClickListener
+            }
+
+            showToast(txt(R.string.reload_chapter_format, (obj.index + 1).toString()))
+            if (obj.cause is MLException) {
+                viewModel.reTranslateChapter(obj.index)
+            } else {
+                viewModel.reloadChapter(obj.index)
+            }
+        }
+    }
+
+    private fun bindImage(binding: ViewBinding, img: AsyncDrawable, requireCloudFlare:Boolean) {
+        if (binding !is SingleImageBinding) return
+        val url = img.destination
+        if (binding.root.url == url) return
+        binding.root.url = url // don't reload if already set
+        UIHelper.bindImage(binding.root, img, requireCloudFlare)
+    }
+
+    private fun bindText(binding: ViewBinding, obj: TextSpan, config: TextConfig) {
+        when (binding) {
+            is SingleSeparatorBinding -> {
+
+            }
+
+            is SingleImageBinding -> {
+                val img = obj.text.getSpans<AsyncDrawableSpan>(0, obj.text.length)[0]
+                val book = viewModel.book
+                val requireCloudFlare = if (book is QuickBook) {
+                    Apis.getApiFromNameNull(book.data.meta.apiName)?.usesCloudFlareKiller == true
+                } else {
+                    false
+                }
+
+                bindImage(binding, img.drawable, requireCloudFlare)
+
+                binding.root.setOnClickListener { root ->
+                    if (root !is TextImageView) {
+                        return@setOnClickListener
+                    }
+                    showImage(root.context, img.drawable, requireCloudFlare)
+                }
+
+                /*val size = 300.toPx
+
+                binding.root.layoutParams = binding.root.layoutParams.apply {
+                    height = size
+                }
+
+                binding.root.setOnClickListener { root ->
+                    if (root !is TextImageView) {
+                        return@setOnClickListener
+                    }
+                    root.layoutParams = root.layoutParams.apply {
+                        height = if (height == ViewGroup.LayoutParams.WRAP_CONTENT) {
+                            size
+                        } else {
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        }
+                    }
+                    root.requestLayout()
+                }
+                bindImage(binding,img)*/
+            }
+
+            is SingleTextBinding -> {
+                binding.root.apply {
+                    // this is set to fix the nonclick https://stackoverflow.com/questions/8641343/android-clickablespan-not-calling-onclick
+                    text = if (config.bionicReading) {
+                        obj.bionicText
+                    } else {
+                        obj.text
+                    }
+
+                    setTextIsSelectable(false) // this is so retarded
+
+                    // Menú de selección: "Subrayar" / "Quitar subrayado". Se fija aquí, de forma
+                    // síncrona, para que el callback siempre corresponda al texto que muestra
+                    // este bind (un post{} podría llegar cuando el holder ya se reutilizó).
+                    if (config.isTextSelectable) {
+                        customSelectionActionModeCallback = createUserMarkCallback(this, obj)
+                    } else if (customSelectionActionModeCallback != null) {
+                        customSelectionActionModeCallback = null
+                    }
+
+                    // https://stackoverflow.com/questions/36801486/androidtextisselectable-true-not-working-for-textview-in-recyclerview
+                    if (config.isTextSelectable) {
+                        post {
+                            setTextIsSelectable(true)
+                            movementMethod = LinkMovementMethod.getInstance()
+                            // setTextIsSelectable(true) hace al TextView focusable en modo táctil, y
+                            // View.onTouchEvent usa el PRIMER toque solo para darle el foco SIN
+                            // llamar al onClick (hace falta un segundo toque; además el foco se
+                            // pierde en cada nuevo bind: scroll, cada frase del TTS...). Por eso
+                            // aquí no se usa onClick: el toque simple se detecta a mano y el
+                            // TextView sigue gestionando selección y enlaces con normalidad.
+                            setOnClickListener(null)
+                            setOnTouchListener(tapToggleListener)
+                        }
+                    } else {
+                        setOnTouchListener(null)
+                        movementMethod = LinkMovementMethod.getInstance()
+                        setOnClickListener {
+                            viewModel.switchVisibility()
+                        }
+                    }
+                    //val links = obj.text.getSpans<io.noties.markwon.core.spans.LinkSpan>()
+                    //if (links.isNotEmpty()) {
+                    //   println("URLS: ${links.size} : ${links.map { it.url }}")
+                    //}
+                }
+            }
+
+            else -> {}
+        }
+    }
+
+    /**
+     * Pinta el subrayado del usuario si cae en este bloque de texto.
+     * Se llama justo después de bindText, que siempre deja en el TextView una copia limpia del
+     * texto, así que no hay nada que quitar cuando no aplica (y no copiamos cada párrafo).
+     */
+    private fun updateUserMark(binding: ViewBinding, span: TextSpan) {
+        if (binding !is SingleTextBinding) return
+        val range = viewModel.userMarkRangeFor(span) ?: return
+        setUserMarkText(binding.root, range.first, range.second)
+    }
+
+    /**
+     * Muestra/oculta el menú del lector con un toque simple, sin pasar por onClick (ver bindText).
+     * Un toque es: dedo abajo y arriba sin moverse más del "touch slop" y antes del tiempo de
+     * pulsación larga, de modo que ni el scroll ni la selección por pulsación larga lo disparan.
+     * Devuelve siempre false para que el TextView siga gestionando selección y enlaces.
+     * Un solo objeto compartido basta: solo hay un gesto de un dedo a la vez.
+     */
+    private val tapToggleListener = object : View.OnTouchListener {
+        private var downX = 0f
+        private var downY = 0f
+        private var downTime = 0L
+        private var isTap = false
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onTouch(v: View, event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.x
+                    downY = event.y
+                    downTime = event.eventTime
+                    isTap = true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    if (isTap) {
+                        val slop = ViewConfiguration.get(v.context).scaledTouchSlop
+                        if (abs(event.x - downX) > slop || abs(event.y - downY) > slop) {
+                            isTap = false
+                        }
+                    }
+                }
+
+                MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> isTap = false
+
+                MotionEvent.ACTION_UP -> {
+                    if (isTap && event.eventTime - downTime < ViewConfiguration.getLongPressTimeout()) {
+                        viewModel.switchVisibility()
+                    }
+                    isTap = false
+                }
+            }
+            return false
+        }
+    }
+
+    /** Selección actual del TextView, ordenada (el ancla puede estar detrás del final). */
+    private fun selectionRange(tv: TextView): Pair<Int, Int> {
+        val length = tv.text.length
+        val a = tv.selectionStart.coerceIn(0, length)
+        val b = tv.selectionEnd.coerceIn(0, length)
+        return minOf(a, b) to maxOf(a, b)
+    }
+
+    /**
+     * Añade al menú contextual de selección:
+     *  - "Subrayar": deja la selección como el único subrayado del lector (sustituye al anterior).
+     *  - "Quitar subrayado": solo aparece si la selección toca el subrayado actual.
+     */
+    private fun createUserMarkCallback(tv: TextView, span: TextSpan): ActionMode.Callback {
+        return object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                menu.add(Menu.NONE, MENU_USER_MARK_ADD, 0, R.string.user_mark_add)
+                    .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                return true
+            }
+
+            // se llama al crearse y cada vez que cambia la selección
+            override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+                val (start, end) = selectionRange(tv)
+                val shouldShowRemove = viewModel.userMarkOverlaps(span, start, end)
+                val hasRemove = menu.findItem(MENU_USER_MARK_REMOVE) != null
+                if (shouldShowRemove == hasRemove) return false
+
+                if (shouldShowRemove) {
+                    menu.add(Menu.NONE, MENU_USER_MARK_REMOVE, 1, R.string.user_mark_remove)
+                        .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                } else {
+                    menu.removeItem(MENU_USER_MARK_REMOVE)
+                }
+                return true
+            }
+
+            override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                when (item.itemId) {
+                    MENU_USER_MARK_ADD -> {
+                        var (start, end) = selectionRange(tv)
+                        val text = tv.text
+                        // sin espacios sueltos a los lados de la frase
+                        while (start < end && text[start].isWhitespace()) start++
+                        while (end > start && text[end - 1].isWhitespace()) end--
+
+                        if (end > start) {
+                            viewModel.setUserMark(
+                                chapterIndex = span.index,
+                                start = span.start + start,
+                                end = span.start + end,
+                                text = text.subSequence(start, end).toString()
+                            )
+                        }
+                        mode.finish()
+                        return true
+                    }
+
+                    MENU_USER_MARK_REMOVE -> {
+                        viewModel.clearUserMark()
+                        mode.finish()
+                        return true
+                    }
+                }
+                return false
+            }
+
+            override fun onDestroyActionMode(mode: ActionMode) {}
+        }
+    }
+
+    fun updateTTSLine(binding: ViewBinding, span: TextSpan, line: TTSHelper.TTSLine?) {
+        if (binding !is SingleTextBinding) return
+        // if the line does not apply
+        if (line == null || line.index != span.index ||
+            (line.startChar < span.start && line.endChar < span.start)
+            || (line.startChar > span.end && line.endChar > span.end)
+        ) {
+            removeHighLightedText(binding.root)
+            return
+        }
+
+        val length = binding.root.length()
+        val start = minOf(maxOf(line.startChar - span.start, 0), length)
+        val end = minOf(maxOf(line.endChar - span.start, 0), length)
+
+        setHighLightedText(
+            binding.root,
+            start,
+            end
+        )
+    }
+
+    private fun setConfig(binding: ViewBinding, config: TextConfig) {
+        when (binding) {
+            is SingleTextBinding -> {
+                config.setArgs(
+                    binding.root,
+                    CONFIG_SIZE or CONFIG_COLOR or CONFIG_FONT or CONFIG_PADDING
+                )
+            }
+
+            is SingleSeparatorBinding -> {
+                binding.root.setBackgroundColor(config.textColor)
+            }
+
+            is SingleLoadingBinding -> {
+                config.setArgs(binding.text, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
+                config.setArgs(binding.loadingBar)
+                binding.root.minimumHeight = config.toolbarHeight
+            }
+
+            is SingleFailedBinding -> {
+                config.setArgs(binding.root, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
+                binding.root.minHeight = config.toolbarHeight
+            }
+
+            is SingleFinishedChapterBinding -> {
+                config.setArgs(binding.root, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
+                binding.root.minHeight = config.toolbarHeight
+            }
+
+            is SingleLoadBinding -> {
+                config.setArgs(binding.root, CONFIG_BG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
+                binding.root.backgroundTintList = ColorStateList.valueOf(config.textColor)
+            }
+
+            is SingleOverscrollChapterBinding -> {
+                config.setArgs(binding.text, CONFIG_COLOR or CONFIG_FONT or CONFIG_FONT_BOLD)
+                binding.progress.progressTintList = ColorStateList.valueOf(config.textColor)
+            }
+
+            else -> {}
+        }
+    }
+
+    private fun bindLoadChapter(binding: ViewBinding, obj: ChapterLoadSpanned) {
+        if (binding !is SingleLoadBinding) return
+        binding.root.setText(obj.name)
+        binding.root.setOnClickListener {
+            viewModel.seekToChapter(obj.loadIndex)
+        }
+    }
+
+    private fun bindOverscrollChapter(
+        binding: ViewBinding,
+        obj: ChapterOverscrollSpanned
+    ) {
+        if (binding !is SingleOverscrollChapterBinding) return
+
+        //binding.text.setText(obj.name)
+        binding.text.isVisible = false
+        binding.progress.progress = 0
+        //binding.root.setOnClickListener {
+        //    viewModel.seekToChapter(obj.loadIndex)
+        //}
+    }
+
+    private fun bindChapter(binding: ViewBinding, obj: ChapterStartSpanned) {
+        if (binding !is SingleFinishedChapterBinding) return
+
+        binding.root.setText(obj.name)
+        binding.root.setOnClickListener {
+            viewModel.switchVisibility()
+        }
+        binding.root.setOnLongClickListener {
+            viewModel.copyChapterToClipboard(obj.index)
+            return@setOnLongClickListener true
+        }
+    }
+
+    class DiffCallback : DiffUtil.ItemCallback<SpanDisplay>() {
+        override fun areItemsTheSame(oldItem: SpanDisplay, newItem: SpanDisplay): Boolean =
+            oldItem.id == newItem.id
+
+        override fun areContentsTheSame(oldItem: SpanDisplay, newItem: SpanDisplay): Boolean {
+            return when (oldItem) {
+                is TextSpan -> {
+                    if (newItem !is TextSpan) return false
+                    // don't check the span content as that does not change
+                    return newItem.end == oldItem.end && newItem.start == oldItem.start && newItem.index != oldItem.index
+                }
+
+                is LoadingSpanned -> {
+                    if (newItem !is LoadingSpanned) return false
+
+                    newItem.id == oldItem.id && newItem.url == oldItem.url
+                }
+
+                is FailedSpanned -> {
+                    if (newItem !is FailedSpanned) return false
+
+                    newItem.id == oldItem.id && newItem.reason == oldItem.reason
+                }
+
+                is ChapterStartSpanned -> {
+                    if (newItem !is ChapterStartSpanned) return false
+
+                    newItem.id == oldItem.id && oldItem.name == newItem.name
+                }
+
+                is ChapterLoadSpanned -> {
+                    if (newItem !is ChapterLoadSpanned) return false
+                    newItem.id == oldItem.id && oldItem.name == newItem.name
+                }
+
+                is ChapterOverscrollSpanned -> {
+                    if (newItem !is ChapterOverscrollSpanned) return false
+                    newItem.id == oldItem.id && oldItem.name == newItem.name
+                }
+
+                else -> throw NotImplementedError()
+            }
+        }
+    }
+}

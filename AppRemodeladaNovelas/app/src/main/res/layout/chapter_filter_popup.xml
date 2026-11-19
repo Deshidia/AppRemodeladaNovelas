@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El filtrado por casillas se sustituyó por los chips de la cabecera de la lista de
+     capítulos (igual que en la app oficial): este panel solo queda para el orden. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="?attr/primaryBlackBackground">
+
+    <TextView
+            android:text="@string/mainpage_sort_by_button_text"
+            android:paddingStart="?android:attr/listPreferredItemPaddingStart"
+            android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="10dp"
+            android:textStyle="bold"
+            android:textSize="20sp"
+            android:textColor="?attr/textColor"
+            android:layout_width="match_parent"
+            android:layout_rowWeight="1"
+            android:paddingTop="10dp"
+            android:layout_height="wrap_content" />
+
+    <androidx.recyclerview.widget.RecyclerView
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            android:id="@+id/sort_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="16dp">
+
+    </androidx.recyclerview.widget.RecyclerView>
+</LinearLayout>
