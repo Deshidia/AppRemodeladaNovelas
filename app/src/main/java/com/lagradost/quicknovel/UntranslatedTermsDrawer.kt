@@ -7,14 +7,17 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
+import androidx.core.widget.NestedScrollView
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.databinding.DialogUntranslatedTermBinding
 import com.lagradost.quicknovel.databinding.ItemUntranslatedTermBinding
+import com.lagradost.quicknovel.databinding.ReadBottomSettingsBinding
 import com.lagradost.quicknovel.databinding.ReadMainBinding
 import com.lagradost.quicknovel.ui.ScrollIndex
 import com.lagradost.quicknovel.ui.SearchHighlight
@@ -162,6 +165,10 @@ class UntranslatedTermsDrawer(
             untranslatedList.adapter = adapter
             untranslatedScrim.setOnClickListener { close() }
             untranslatedClose.setOnClickListener { close() }
+            untranslatedOpenReplace.setOnClickListener {
+                close()
+                openReplaceSheet()
+            }
             untranslatedSearchInput.doAfterTextChanged { editable ->
                 runSearch(editable?.toString().orEmpty())
             }
@@ -193,6 +200,8 @@ class UntranslatedTermsDrawer(
         adapter.notifyDataSetChanged()
         setEmpty(activity.getString(R.string.untranslated_searching))
         binding.untranslatedSubtitle.text = currentSubtitle()
+        // sin título de libro aún no hay clave para las sustituciones: no abriría nada
+        binding.untranslatedOpenReplace.isVisible = viewModel.replacementsNovelName() != null
 
         // la píldora sobra con el panel abierto; se restaura la última búsqueda
         binding.untranslatedSearchPill.isVisible = false
@@ -249,6 +258,50 @@ class UntranslatedTermsDrawer(
             .withEndAction { binding.untranslatedDrawerRoot.isVisible = false }
             .start()
         binding.untranslatedScrim.animate().alpha(0f).setDuration(200L).start()
+    }
+
+    /**
+     * Abre la función Sustituir directamente, sin los ajustes del lector: reutiliza el mismo
+     * editor ([ReadReplaceTab]) pero mostrando solo su contenedor en una hoja propia. Igual
+     * que al cerrar los ajustes, las reglas se re-aplican al capítulo al cerrar la hoja.
+     */
+    private fun openReplaceSheet() {
+        val novelName = viewModel.replacementsNovelName() ?: return
+        val dialog = BottomSheetDialog(activity)
+
+        val sheetBinding = ReadBottomSettingsBinding.inflate(activity.layoutInflater)
+        // solo el editor de sustituciones: se despega del resto del layout de ajustes
+        val container = sheetBinding.tabReplaceContainer
+        (container.parent as? ViewGroup)?.removeView(container)
+        container.isVisible = true
+
+        // scroll como en los ajustes, por si la lista de reglas no cabe en pantalla
+        val scroll = NestedScrollView(activity)
+        scroll.addView(
+            container,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        // parámetros explícitos: la vista inflada sin padre no trae su ancho del XML
+        dialog.setContentView(
+            scroll,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        var replacementsChanged = false
+        ReadReplaceTab(activity, sheetBinding, novelName) {
+            replacementsChanged = true
+        }.setup()
+
+        dialog.setOnDismissListener {
+            if (replacementsChanged) viewModel.reapplyReplacements()
+        }
+        dialog.show()
     }
 
     private fun currentSubtitle(): String {
