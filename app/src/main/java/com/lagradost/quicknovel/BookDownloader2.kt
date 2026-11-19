@@ -29,6 +29,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.preference.PreferenceManager
@@ -48,9 +49,12 @@ import com.lagradost.quicknovel.BookDownloader2.LOCAL_EPUB_MIN_SIZE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE
 import com.lagradost.quicknovel.BookDownloader2Helper.IMPORT_SOURCE_PDF
 import com.lagradost.quicknovel.BookDownloader2Helper.createQuickStream
+import com.lagradost.quicknovel.DataStore.getFolderName
+import com.lagradost.quicknovel.DataStore.getSharedPrefs
 import com.lagradost.quicknovel.providers.WebLinkProvider
 import com.lagradost.quicknovel.ui.LibraryListManager
 import com.lagradost.quicknovel.ui.LibraryMembership
+import com.lagradost.quicknovel.ui.result.remapReadMarks
 import com.lagradost.quicknovel.BookDownloader2Helper.generateId
 import com.lagradost.quicknovel.BookDownloader2Helper.getDirectory
 import com.lagradost.quicknovel.CommonActivity.activity
@@ -73,6 +77,7 @@ import com.lagradost.quicknovel.util.DownloadTranslation
 import com.lagradost.quicknovel.util.DownloadTranslator
 import com.lagradost.quicknovel.util.Event
 import com.lagradost.quicknovel.util.ResultCached
+import com.lagradost.quicknovel.util.TextReplacements
 import com.lagradost.quicknovel.util.TranslationNotAppliedException
 import com.lagradost.quicknovel.util.UIHelper.colorFromAttribute
 import com.lagradost.quicknovel.util.pmap
@@ -1495,6 +1500,53 @@ object BookDownloader2 {
             EPUB_CURRENT_POSITION_SCROLL_CHAR, newName,
             getKey<Int>(EPUB_CURRENT_POSITION_SCROLL_CHAR, oldName)
         )
+
+        // El resto del estado de la novela también está indexado por su NOMBRE, y sin esta
+        // migración se quedaría huérfano: el usuario vería "Sustituir" vacío, el subrayado
+        // desaparecido y los ajustes de traducción a cero aunque el progreso sí se moviera.
+        // Solo si el nombre cambia de verdad: con oldName == newName estas líneas borrarían
+        // justo lo que acaban de copiar.
+        if (oldName != newName) {
+            // Reglas "Sustituir" (se mueven: dejarlas en el nombre viejo las duplicaría en el
+            // selector de "copiar desde otras novelas" porque es por nombre, no por id)
+            val rules = TextReplacements.get(oldName)
+            if (rules.isNotEmpty()) {
+                TextReplacements.set(newName, rules)
+            }
+            removeKey(NOVEL_TEXT_REPLACEMENTS, oldName)
+
+            // Subrayado del usuario
+            getKey<ReaderMark>(EPUB_USER_MARK, oldName)?.let { mark ->
+                setKey(EPUB_USER_MARK, newName, mark)
+            }
+            removeKey(EPUB_USER_MARK, oldName)
+
+            // Ajustes de traducción por novela
+            getKey<ReadActivityViewModel.MLSettings>(EPUB_CURRENT_ML, oldName)?.let { settings ->
+                setKey(EPUB_CURRENT_ML, newName, settings)
+            }
+            removeKey(EPUB_CURRENT_ML, oldName)
+
+            // Marcas de "capítulo leído": claves "<carpeta>/<nombre>/<índice>"
+            context?.getSharedPrefs()?.let { prefs ->
+                val fromPrefix = getFolderName(EPUB_CURRENT_POSITION_READ_AT, "$oldName/")
+                val toPrefix = getFolderName(EPUB_CURRENT_POSITION_READ_AT, "$newName/")
+                val copies = remapReadMarks(prefs.all, fromPrefix, toPrefix)
+                val oldKeys = prefs.all.keys.filter {
+                    it.startsWith(fromPrefix) && !it.startsWith(toPrefix)
+                }
+                if (copies.isNotEmpty() || oldKeys.isNotEmpty()) {
+                    prefs.edit {
+                        for ((key, value) in copies) {
+                            putString(key, value)
+                        }
+                        for (key in oldKeys) {
+                            remove(key)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private val migrationNovelMutex = Mutex()
