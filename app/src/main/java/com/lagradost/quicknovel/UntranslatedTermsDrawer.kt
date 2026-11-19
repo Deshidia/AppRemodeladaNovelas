@@ -7,13 +7,11 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
-import androidx.core.widget.NestedScrollView
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.lagradost.quicknovel.CommonActivity.showToast
 import com.lagradost.quicknovel.databinding.DialogUntranslatedTermBinding
 import com.lagradost.quicknovel.databinding.ItemUntranslatedTermBinding
@@ -43,6 +41,8 @@ import kotlin.math.min
  * escribir y saltar entre coincidencias con las flechas; todas quedan subrayadas en el texto
  * (cian, distinto del marcador del usuario) y la que se visita lleva tinte. Al navegar, el
  * panel se cierra y una píldora flotante permite seguir avanzando mientras se lee.
+ * Abajo del panel, donde estaba el botón, va integrada la propia ventana de Sustituir: el mismo
+ * editor de reglas de los ajustes del lector. Sus cambios se reaplican al capítulo en caliente.
  */
 class UntranslatedTermsDrawer(
     private val activity: ReadActivity2,
@@ -159,16 +159,15 @@ class UntranslatedTermsDrawer(
     private val applyHandler = Handler(Looper.getMainLooper())
     private var applyRunnable: Runnable? = null
 
+    /** Ventana de Sustituir integrada abajo del panel (null hasta que el libro tiene título). */
+    private var replaceTab: ReadReplaceTab? = null
+
     fun setup() {
         binding.apply {
             untranslatedList.layoutManager = LinearLayoutManager(activity)
             untranslatedList.adapter = adapter
             untranslatedScrim.setOnClickListener { close() }
             untranslatedClose.setOnClickListener { close() }
-            untranslatedOpenReplace.setOnClickListener {
-                close()
-                openReplaceSheet()
-            }
             untranslatedSearchInput.doAfterTextChanged { editable ->
                 runSearch(editable?.toString().orEmpty())
             }
@@ -200,8 +199,10 @@ class UntranslatedTermsDrawer(
         adapter.notifyDataSetChanged()
         setEmpty(activity.getString(R.string.untranslated_searching))
         binding.untranslatedSubtitle.text = currentSubtitle()
-        // sin título de libro aún no hay clave para las sustituciones: no abriría nada
-        binding.untranslatedOpenReplace.isVisible = viewModel.replacementsNovelName() != null
+        // la ventana de Sustituir integrada se monta en cuanto el libro tiene título; sin clave
+        // para las sustituciones no se muestra (no habría dónde guardar las reglas)
+        if (replaceTab == null) setupReplaceEditor()
+        binding.untranslatedReplaceScroll.isVisible = replaceTab != null
 
         // la píldora sobra con el panel abierto; se restaura la última búsqueda
         binding.untranslatedSearchPill.isVisible = false
@@ -261,47 +262,30 @@ class UntranslatedTermsDrawer(
     }
 
     /**
-     * Abre la función Sustituir directamente, sin los ajustes del lector: reutiliza el mismo
-     * editor ([ReadReplaceTab]) pero mostrando solo su contenedor en una hoja propia. Igual
-     * que al cerrar los ajustes, las reglas se re-aplican al capítulo al cerrar la hoja.
+     * Pega la ventana de Sustituir al final del panel, donde estaba el botón: se infla el layout
+     * de los ajustes del lector, se despega solo su bloque de sustituciones y se añade al scroll
+     * del panel. Cada cambio en el editor reaplica las reglas al capítulo (mismo debounce que
+     * al aceptar un término del panel).
      */
-    private fun openReplaceSheet() {
+    private fun setupReplaceEditor() {
         val novelName = viewModel.replacementsNovelName() ?: return
-        val dialog = BottomSheetDialog(activity)
 
-        val sheetBinding = ReadBottomSettingsBinding.inflate(activity.layoutInflater)
-        // solo el editor de sustituciones: se despega del resto del layout de ajustes
-        val container = sheetBinding.tabReplaceContainer
+        val settingsBinding = ReadBottomSettingsBinding.inflate(activity.layoutInflater)
+        // solo el bloque de sustituciones: se despega del resto del layout de ajustes
+        val container = settingsBinding.tabReplaceContainer
         (container.parent as? ViewGroup)?.removeView(container)
         container.isVisible = true
-
-        // scroll como en los ajustes, por si la lista de reglas no cabe en pantalla
-        val scroll = NestedScrollView(activity)
-        scroll.addView(
+        binding.untranslatedReplaceHost.addView(
             container,
             ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
-        // parámetros explícitos: la vista inflada sin padre no trae su ancho del XML
-        dialog.setContentView(
-            scroll,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
 
-        var replacementsChanged = false
-        ReadReplaceTab(activity, sheetBinding, novelName) {
-            replacementsChanged = true
-        }.setup()
-
-        dialog.setOnDismissListener {
-            if (replacementsChanged) viewModel.reapplyReplacements()
-        }
-        dialog.show()
+        replaceTab = ReadReplaceTab(activity, settingsBinding, novelName) {
+            scheduleApply()
+        }.apply { setup() }
     }
 
     private fun currentSubtitle(): String {
@@ -316,6 +300,12 @@ class UntranslatedTermsDrawer(
     }
 
     private fun showPanel() {
+        // la ventana de Sustituir integrada no roba más de media pantalla: si el contenido es
+        // más alto, scrollea dentro de sí misma; la lista de términos siempre manda
+        binding.untranslatedReplaceScroll.layoutParams?.height =
+            min((activity.resources.displayMetrics.heightPixels * 0.5f).toInt(), 320.toPx)
+        binding.untranslatedReplaceScroll.requestLayout()
+
         // ancho: 320dp como máximo, sin salirse de la pantalla
         val width = min(320.toPx, (activity.resources.displayMetrics.widthPixels * 0.85f).toInt())
         binding.untranslatedDrawer.layoutParams =
@@ -532,6 +522,9 @@ class UntranslatedTermsDrawer(
         row.state = TermState.SAVED
         row.translation = translation
         adapter.notifyItemChanged(position)
+
+        // la ventana integrada pinta ya la regla aceptada
+        replaceTab?.refresh()
 
         // el texto va a cambiar (reapplyReplacements): quita el subrayado de la búsqueda,
         // que dejaría de coincidir con las posiciones; se recalcula al navegar de nuevo

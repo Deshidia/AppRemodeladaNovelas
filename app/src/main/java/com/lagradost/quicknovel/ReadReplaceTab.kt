@@ -92,6 +92,12 @@ class ReadReplaceTab(
         render()
     }
 
+    /** Recarga las reglas guardadas y las vuelve a pintar (p. ej. al aceptar un término del panel). */
+    fun refresh() {
+        rules = TextReplacements.get(novelName)
+        render()
+    }
+
     private fun save(list: List<TextReplacement>) {
         rules = list
         TextReplacements.set(novelName, list)
