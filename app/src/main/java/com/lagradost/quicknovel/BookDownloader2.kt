@@ -109,6 +109,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.util.BitSet
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -133,7 +134,13 @@ data class DownloadProgressState(
     // How many is there in total
     var total: Long,
     var lastUpdatedMs: Long,
-    var etaMs: Long?
+    var etaMs: Long?,
+    // Índice del capítulo que se está descargando ahora mismo (equivalente al
+    // chapterProgress de la app oficial): la lista de capítulos muestra el spinner en esa fila.
+    var currentChapter: Int? = null,
+    // Capítulos en cola de la descarga activa (equivalente al pendingChapters de la app
+    // oficial): la lista de capítulos muestra el icono "not_started" en esas filas.
+    var pendingChapters: BitSet? = null
 ) {
     fun eta(context: Context): String {
         return when (state) {
@@ -2506,6 +2513,25 @@ object BookDownloader2 {
         //println("totalItems:$totalItems")
         setPrefixData(load, api.name, totalItems.toLong(), alreadyDownloaded)
 
+        // Cola de la descarga activa para la lista de capítulos (app oficial): los capítulos
+        // del rango que aún no están en disco aparecen como pendientes ("not_started").
+        val pendingChapters = BitSet().apply {
+            for (i in range.start..range.endInclusive) {
+                val f = File(
+                    filesDir.toString() + BookDownloader2Helper.getFilename(
+                        sApiName, sAuthor, sName, i
+                    )
+                )
+                if (!(f.exists() && f.length() > 10)) set(i)
+            }
+        }
+        changeDownload(id) {
+            this.pendingChapters = pendingChapters
+            currentChapter = null
+        }?.let { progressState ->
+            createNotification(id, load, progressState)
+        }
+
         var downloadedTotal = 0L // how many successful get requests
         var translatedTotal = 0 // how many chapters have been rewritten with their translation
 
@@ -2586,9 +2612,15 @@ object BookDownloader2 {
                     }
                 }
 
-                val beforeDownloadTime = System.currentTimeMillis()
+                var beforeDownloadTime = System.currentTimeMillis()
                 var hasDownloadedChapter = true
                 if (needsDownload) {
+                    // Lista de capítulos (app oficial): el capítulo que se está descargando
+                    // muestra el spinner y deja de estar en la cola.
+                    changeDownload(id) {
+                        currentChapter = index
+                        pendingChapters?.clear(index)
+                    }
                     hasDownloadedChapter = BookDownloader2Helper.downloadIndividualChapter(
                         // forceReload también cura un archivo existente pero inválido (<= 10 bytes)
                         filepath, api, data, forceReload = rFile.exists()
@@ -2632,6 +2664,8 @@ object BookDownloader2 {
                     this.downloaded = processedItems.toLong() + alreadyDownloaded
                     state = currentState
                     etaMs = (timePerLoadMs * (range.endInclusive - index)).toLong()
+                    currentChapter = null
+                    pendingChapters?.clear(index)
                 }?.let { progressState ->
                     createNotification(id, load, progressState)
                 }
@@ -2667,6 +2701,9 @@ object BookDownloader2 {
                 this.progress = totalItems.toLong()
                 this.downloaded = range.endInclusive + 1 - range.start + alreadyDownloaded
                 state = DownloadState.IsDone
+                currentChapter = null
+                // el val local pendingChapters sombra la propiedad del estado aquí dentro
+                this.pendingChapters = null
             }?.let { progressState ->
                 // only notify done if we have actually done some work
                 if (downloadedTotal > 0)
@@ -2679,7 +2716,12 @@ object BookDownloader2 {
         } catch (t: Throwable) {
             // also set it here in case of exception
             logError(t)
-            changeDownload(id) { state = DownloadState.IsFailed }
+            changeDownload(id) {
+                state = DownloadState.IsFailed
+                currentChapter = null
+                // el val local pendingChapters sombra la propiedad del estado aquí dentro
+                this.pendingChapters = null
+            }
             if (downloadedTotal > 0) {
                 setSuffixData(load, api.name)
             }
@@ -2738,6 +2780,25 @@ object BookDownloader2 {
             // crea el estado IsPending (y evita duplicados con currentDownloads)
             setPrefixData(load, api.name, load.data.size.toLong(), alreadyDownloaded)
 
+            // Cola de la descarga activa para la lista de capítulos (app oficial): los capítulos
+            // seleccionados que aún no están en disco aparecen como pendientes ("not_started").
+            val pendingChapters = BitSet().apply {
+                for (i in sorted) {
+                    val f = File(
+                        filesDir.toString() + BookDownloader2Helper.getFilename(
+                            sApiName, sAuthor, sName, i
+                        )
+                    )
+                    if (!(f.exists() && f.length() > 10)) set(i)
+                }
+            }
+            changeDownload(id) {
+                this.pendingChapters = pendingChapters
+                currentChapter = null
+            }?.let { progressState ->
+                createNotification(id, load, progressState)
+            }
+
             var currentState = DownloadState.IsDownloading
             changeDownload(id) {
                 state = currentState
@@ -2783,6 +2844,14 @@ object BookDownloader2 {
                         index
                     )
                 val data = load.data.getOrNull(index) ?: continue
+
+                // Lista de capítulos (app oficial): el capítulo que se está descargando
+                // muestra el spinner y deja de estar en la cola.
+                changeDownload(id) {
+                    currentChapter = index
+                    pendingChapters?.clear(index)
+                }
+
                 val hasDownloadedChapter = BookDownloader2Helper.downloadIndividualChapter(
                     filepath, api, data
                 )
@@ -2793,6 +2862,7 @@ object BookDownloader2 {
                         progress = (index + 1).toLong()
                         downloaded = alreadyDownloaded + downloadedTotal
                         state = DownloadState.IsDownloading
+                        currentChapter = null
                     }?.let { progressState ->
                         createNotification(id, load, progressState)
                     }
@@ -2801,6 +2871,7 @@ object BookDownloader2 {
                         progress = (index + 1).toLong()
                         downloaded = alreadyDownloaded + downloadedTotal
                         state = DownloadState.IsFailed
+                        currentChapter = null
                     }?.let { progressState ->
                         createNotification(id, load, progressState)
                     }
@@ -2819,6 +2890,9 @@ object BookDownloader2 {
                 BookDownloader2Helper.downloadInfo(context, load.author, load.name, api.name)
             changeDownload(id) {
                 state = DownloadState.IsDone
+                currentChapter = null
+                // el val local pendingChapters sombra la propiedad del estado aquí dentro
+                this.pendingChapters = null
                 if (info != null) {
                     progress = info.progress
                     downloaded = info.downloaded
@@ -2832,7 +2906,12 @@ object BookDownloader2 {
         } catch (t: Throwable) {
             // also set it here in case of exception
             logError(t)
-            changeDownload(id) { state = DownloadState.IsFailed }
+            changeDownload(id) {
+                state = DownloadState.IsFailed
+                currentChapter = null
+                // el val local pendingChapters sombra la propiedad del estado aquí dentro
+                this.pendingChapters = null
+            }
             if (downloadedTotal > 0) {
                 setSuffixData(load, api.name)
             }

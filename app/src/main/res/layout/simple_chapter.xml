@@ -7,56 +7,155 @@
         android:layout_width="match_parent"
         app:cardCornerRadius="0dp"
         android:foreground="?android:attr/selectableItemBackgroundBorderless"
-        android:layout_height="50dp">
+        android:layout_height="wrap_content">
 
     <LinearLayout
-            android:layout_gravity="center"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
+        <!-- Separador "Descarga parcial desde N +" (app oficial), sobre la fila en orden normal -->
         <LinearLayout
-                android:layout_weight="1"
-                android:layout_width="0dp"
-                android:gravity="center"
-                android:paddingStart="5dp"
-                android:paddingEnd="5dp"
-                android:orientation="vertical"
-                android:layout_height="match_parent">
+                android:id="@+id/chapter_stroke_top"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="8dp"
+                android:visibility="gone"
+                tools:visibility="gone">
+
+            <View
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/stroke_line" />
 
             <TextView
-                    android:ellipsize="marquee"
-                    android:singleLine="true"
-                    tools:textSize="16sp"
-                    tools:textColor="?attr/textColor"
-                    android:layout_gravity="center"
-                    tools:text="Chapter 1"
-                    android:id="@+id/name"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
+                    android:id="@+id/chapter_stroke_top_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="12sp"
+                    tools:text="Descarga parcial desde 5 +" />
 
-            <TextView
-                    tools:textSize="14sp"
-                    tools:textColor="?attr/grayTextColor"
-                    android:layout_gravity="center"
-                    tools:text="Released 10h ago"
-                    android:id="@+id/release_date"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
-
-            </TextView>
+            <View
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/stroke_line" />
         </LinearLayout>
 
-        <!-- Descargar capítulo (app oficial): abre la selección múltiple con este capítulo -->
-        <ImageView
-                android:id="@+id/download_chapter"
-                android:layout_width="44dp"
-                android:layout_height="match_parent"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/download"
-                android:padding="10dp"
-                android:src="@drawable/ic_baseline_get_app_24"
-                app:tint="?attr/textColor" />
+        <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="50dp"
+                android:layout_gravity="center"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+            <!-- Capítulo leído (app oficial): check a la izquierda de los textos -->
+            <ImageView
+                    android:id="@+id/chapter_read_check"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="5dp"
+                    android:contentDescription="@string/has_read"
+                    android:src="@drawable/check_24px"
+                    android:visibility="gone"
+                    app:tint="?attr/textColor"
+                    tools:visibility="visible" />
+
+            <LinearLayout
+                    android:layout_weight="1"
+                    android:layout_width="0dp"
+                    android:gravity="center"
+                    android:paddingStart="5dp"
+                    android:paddingEnd="5dp"
+                    android:orientation="vertical"
+                    android:layout_height="match_parent">
+
+                <TextView
+                        android:ellipsize="marquee"
+                        android:singleLine="true"
+                        tools:textSize="16sp"
+                        tools:textColor="?attr/textColor"
+                        android:layout_gravity="center"
+                        tools:text="Chapter 1"
+                        android:id="@+id/name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                <TextView
+                        tools:textSize="14sp"
+                        tools:textColor="?attr/grayTextColor"
+                        android:layout_gravity="center"
+                        tools:text="Released 10h ago"
+                        android:id="@+id/release_date"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <!-- Descarga del capítulo (app oficial): descargado = check, en curso = spinner,
+                 en cola = not_started, sin descargar = flecha de descarga -->
+            <FrameLayout
+                    android:layout_width="44dp"
+                    android:layout_height="match_parent">
+
+                <ImageView
+                        android:id="@+id/download_chapter"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="?android:attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/download"
+                        android:padding="10dp"
+                        android:src="@drawable/arrow_circle_down_24px"
+                        app:tint="?attr/textColor" />
+
+                <ProgressBar
+                        android:id="@+id/download_chapter_progress"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:indeterminateTint="?attr/textColor"
+                        android:visibility="gone"
+                        tools:visibility="gone" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <!-- Separador "Descarga parcial desde N +" (app oficial), bajo la fila en orden inverso -->
+        <LinearLayout
+                android:id="@+id/chapter_stroke_bottom"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="8dp"
+                android:visibility="gone"
+                tools:visibility="gone">
+
+            <View
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/stroke_line" />
+
+            <TextView
+                    android:id="@+id/chapter_stroke_bottom_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="10dp"
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="12sp"
+                    tools:text="Descarga parcial desde 5 +" />
+
+            <View
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/stroke_line" />
+        </LinearLayout>
     </LinearLayout>
 </androidx.cardview.widget.CardView>

@@ -21,7 +21,6 @@ import androidx.core.widget.NestedScrollView
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipDrawable
 import com.google.android.material.tabs.TabLayout
@@ -34,7 +33,6 @@ import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.untranslatedName
 import com.lagradost.quicknovel.databinding.ChapterDialogBinding
-import com.lagradost.quicknovel.databinding.ChapterFilterPopupBinding
 import com.lagradost.quicknovel.databinding.ResultReplaceItemBinding
 import com.lagradost.quicknovel.databinding.FragmentResultBinding
 import com.lagradost.quicknovel.mvvm.Resource
@@ -44,7 +42,6 @@ import com.lagradost.quicknovel.mvvm.observeNullable
 import com.lagradost.quicknovel.ui.BaseFragment
 import com.lagradost.quicknovel.ui.LibraryCategoriesDialog
 import com.lagradost.quicknovel.ui.LibraryListManager
-import com.lagradost.quicknovel.ui.SortingMethodAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainAdapter
 import com.lagradost.quicknovel.ui.mainpage.MainPageFragment
 import com.lagradost.quicknovel.ui.setRecycledViewPool
@@ -64,7 +61,10 @@ import com.lagradost.quicknovel.util.UIHelper.html
 import com.lagradost.quicknovel.util.UIHelper.humanReadableByteCountSI
 import com.lagradost.quicknovel.util.UIHelper.popupMenu
 import com.lagradost.quicknovel.util.UIHelper.setImage
+import com.lagradost.quicknovel.util.SingleSelectionHelper.showDialog
 import com.lagradost.quicknovel.util.toPx
+import androidx.activity.OnBackPressedCallback
+import java.util.BitSet
 
 const val MAX_SYNO_LENGH = 300
 
@@ -72,6 +72,9 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
     BindingCreator.Inflate(FragmentResultBinding::inflate)
 ) {
     private val viewModel: ResultViewModel by viewModels()
+
+    /** app oficial: con capítulos seleccionados, "atrás" limpia la selección. */
+    private var chapterSelectionBackCallback: OnBackPressedCallback? = null
 
     companion object {
         /** Id de la pestaña "Sustituir" (0 = Novela, 1 = Reseñas, 2 = Relacionado, 3 = Capítulos). */
@@ -371,18 +374,71 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
     }
 
     /**
-     * Muestra u oculta la barra de selección múltiple ("Selected N") y ajusta el FAB
-     * de filtros, como en la app oficial.
+     * Barra de selección múltiple de capítulos (app oficial): "Selected N" con botones de peso
+     * uniforme — cerrar; con una sola selección, seleccionar hasta arriba y hasta abajo (con el
+     * icono invertido si el orden es inverso); marcar no leído si hay leídos seleccionados;
+     * marcar leído si quedan leídos por marcar; y descargar si falta alguno por descargar.
      */
     @SuppressLint("NotifyDataSetChanged")
     private fun updateChapterSelectionUi(
         binding: FragmentResultBinding,
-        selecting: Boolean
+        selection: BitSet
     ) {
+        val selecting = !selection.isEmpty
         binding.chapterSelectBar.isVisible = selecting
-        binding.chaptersFab.isVisible =
-            !selecting && viewModel.currentTabIndex.value == 3
         (binding.chapterList.adapter as? ChapterAdapter)?.notifyDataSetChanged()
+
+        if (!selecting) return
+
+        val selectedSize = selection.cardinality()
+        binding.chapterSelectedCount.text =
+            getString(R.string.selected_format, selectedSize)
+
+        val size = viewModel.totalChapterCount()
+        val isSingle = selectedSize == 1
+        val index = if (isSingle) selection.nextSetBit(0) else -1
+
+        // app oficial: con una selección, "seleccionar hasta aquí" y "seleccionar hasta el final"
+        val reverseSort =
+            ChapterSortingMethodType.from(ResultViewModel.sortChapterBy) == ChapterSortingMethodType.RevAscending
+        binding.chapterSelectUp.isVisible = isSingle && index > 0
+        binding.chapterSelectUp.setImageResource(
+            if (reverseSort) R.drawable.move_selection_down else R.drawable.move_selection_up
+        )
+        binding.chapterSelectDown.isVisible = isSingle && index + 1 < size
+        binding.chapterSelectDown.setImageResource(
+            if (reverseSort) R.drawable.move_selection_up else R.drawable.move_selection_down
+        )
+
+        // app oficial: marcar como leído / no leído según lo que ya esté leído
+        val readCount = viewModel.selectedReadCount()
+        binding.chapterSelectUnread.isVisible = readCount > 0
+        binding.chapterSelectRead.isVisible = readCount != selectedSize
+
+        // app oficial: descargar solo si falta alguno por descargar
+        binding.chapterSelectDownload.isVisible = viewModel.selectionHasNotDownloaded()
+
+        chapterSelectionBackCallback?.isEnabled = selecting
+    }
+
+    /**
+     * Estado visual de los chips de filtro (app oficial): el chip activo marca también su estado
+     * inverso, y la etiqueta cambia entre "Descargado"/"No descargado" y "Has leído"/"No leído".
+     */
+    private fun updateChapterFilterChips(binding: FragmentResultBinding) {
+        val filter = viewModel.chapterFilterMethodType
+        binding.chapterFilterChipAll.isChecked =
+            filter == ChapterFilterMethodType.All
+        binding.chapterFilterChipDownloaded.isChecked =
+            filter == ChapterFilterMethodType.Downloaded || filter == ChapterFilterMethodType.UnDownloaded
+        binding.chapterFilterChipDownloaded.text = getString(
+            if (filter == ChapterFilterMethodType.UnDownloaded) R.string.not_downloaded else R.string.downloaded
+        )
+        binding.chapterFilterChipRead.isChecked =
+            filter == ChapterFilterMethodType.Read || filter == ChapterFilterMethodType.UnRead
+        binding.chapterFilterChipRead.text = getString(
+            if (filter == ChapterFilterMethodType.UnRead) R.string.not_read else R.string.has_read
+        )
     }
 
     private fun updateScrollHeight() {
@@ -620,9 +676,6 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                         resultChapters.text = res.data.size.toString()
                         resultChaptersInfo.text =
                             if (res.data.size == 1) getString(R.string.chapter) else getString(R.string.chapters)
-                        // contador de capítulos de la lista de capítulos (app oficial)
-                        chapterCountText.text =
-                            getString(R.string.chapter_count_formatted).format(res.data.size)
                         resultQuickstream.isVisible = true
                         resultTotalChapters.isVisible = true
                         if (res.data.isNotEmpty()) {
@@ -983,14 +1036,13 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                 // hiddenView.isGone = 0 == pos
                 resultReviewsholder.isVisible = 1 == pos
                 reviewsFab.isVisible = 1 == pos
-                chaptersFab.isVisible = 3 == pos && !viewModel.isSelectingChapters()
                 resultRelatedholder.isVisible = 2 == pos
                 resultChapterholder.isVisible = 3 == pos
                 resultReplaceHolder.isVisible = TAB_REPLACE == pos
             }
-            // al salir de la pestaña de capítulos se cierra la selección múltiple
+            // app oficial: al salir de la pestaña de capítulos se limpia la selección
             if (pos != 3 && viewModel.isSelectingChapters()) {
-                viewModel.exitChapterSelectionMode()
+                viewModel.clearChapterSelection()
             }
         }
 
@@ -1034,6 +1086,16 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
                     adapter.submitList(chapters)
                 }
             }
+
+            updateChapterFilterChips(binding)
+
+            // contador de capítulos de la app oficial: "N", o "N/M" al filtrar
+            val filtered = chapters?.size ?: 0
+            val total = viewModel.totalChapterCount()
+            binding.chapterCountText.text = getString(
+                R.string.read_action_chapters_formatted,
+                if (filtered == total) total.toString() else "$filtered/$total"
+            )
         }
 
         observe(viewModel.chapterNamesChanged) {
@@ -1055,112 +1117,115 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
         })
 
         // ==== Filtros rápidos de capítulos (Todos / Descargado / Has leído), app oficial ====
-        binding.chapterFilterChipAll.isChecked =
-            ResultViewModel.chapterQuickFilter == ResultViewModel.CHAPTER_QUICK_FILTER_ALL
-        binding.chapterFilterChipDownloaded.isChecked =
-            ResultViewModel.chapterQuickFilter == ResultViewModel.CHAPTER_QUICK_FILTER_DOWNLOADED
-        binding.chapterFilterChipRead.isChecked =
-            ResultViewModel.chapterQuickFilter == ResultViewModel.CHAPTER_QUICK_FILTER_READ
-        binding.chapterFilterChipGroup.setOnCheckedStateChangeListener { _, checkedIds ->
-            ResultViewModel.chapterQuickFilter = when (checkedIds.firstOrNull()) {
-                R.id.chapter_filter_chip_downloaded -> ResultViewModel.CHAPTER_QUICK_FILTER_DOWNLOADED
-                R.id.chapter_filter_chip_read -> ResultViewModel.CHAPTER_QUICK_FILTER_READ
-                else -> ResultViewModel.CHAPTER_QUICK_FILTER_ALL
+        // Cada chip alterna entre su estado y el inverso (No descargado / No leído) y, como en
+        // la app oficial, solo hay un filtro activo a la vez.
+        updateChapterFilterChips(binding)
+
+        binding.chapterFilterChipAll.setOnClickListener {
+            viewModel.setChapterFilterMethod(ChapterFilterMethodType.All)
+        }
+
+        binding.chapterFilterChipDownloaded.setOnClickListener {
+            viewModel.setChapterFilterMethod(
+                if (viewModel.chapterFilterMethodType == ChapterFilterMethodType.Downloaded) {
+                    ChapterFilterMethodType.UnDownloaded
+                } else {
+                    ChapterFilterMethodType.Downloaded
+                }
+            )
+        }
+
+        binding.chapterFilterChipRead.setOnClickListener {
+            viewModel.setChapterFilterMethod(
+                if (viewModel.chapterFilterMethodType == ChapterFilterMethodType.Read) {
+                    ChapterFilterMethodType.UnRead
+                } else {
+                    ChapterFilterMethodType.Read
+                }
+            )
+        }
+
+        // Botón de ordenar de la cabecera (app oficial): diálogo Ordenar por con Aplicar/Cancelar
+        binding.chapterSortButton.setOnClickListener { view ->
+            val act = view.context ?: return@setOnClickListener
+            val current = ChapterSortingMethodType.from(ResultViewModel.sortChapterBy)
+            val selectedIndex = chapterSortingMethods.indexOfFirst { pair ->
+                pair.id == current || pair.inverse == current
             }
-            viewModel.reorderChapters()
+            act.showDialog(
+                chapterSortingMethods.map { act.getString(it.name) },
+                selectedIndex,
+                act.getString(R.string.filter_dialog_sort_by),
+                showApply = true,
+                dismissCallback = {},
+                callback = { position ->
+                    val pair = chapterSortingMethods.getOrNull(position) ?: return@showDialog
+                    // app oficial: si ya está activo, se alterna entre ascendente e inverso
+                    val newSort = when {
+                        pair.id == pair.inverse -> pair.id
+                        pair.id == current -> pair.inverse
+                        else -> pair.id
+                    }
+                    ResultViewModel.sortChapterBy = newSort.id
+                    viewModel.reorderChapters()
+                }
+            )
         }
 
         // ==== Selección múltiple de capítulos (app oficial) ====
-        observe(viewModel.chapterSelectionMode) { selecting ->
-            updateChapterSelectionUi(binding, selecting)
+        observe(viewModel.selectedChapters) { selection ->
+            updateChapterSelectionUi(binding, selection)
         }
 
-        observe(viewModel.selectedChapterUrls) { selected ->
-            binding.chapterSelectedCount.text =
-                getString(R.string.chapters_selected_formatted).format(selected.size)
+        observe(viewModel.chapterReadMarksChanged) {
             (binding.chapterList.adapter as? ChapterAdapter)?.notifyDataSetChanged()
         }
 
         binding.chapterSelectClose.setOnClickListener {
-            viewModel.exitChapterSelectionMode()
+            viewModel.clearChapterSelection()
         }
 
-        binding.chapterSelectSelectAll.setOnClickListener {
-            viewModel.toggleSelectAllChapters()
+        binding.chapterSelectUp.setOnClickListener {
+            val selection = viewModel.selectedChapters.value ?: return@setOnClickListener
+            if (selection.cardinality() != 1) return@setOnClickListener
+            val index = selection.nextSetBit(0)
+            if (index <= 0) return@setOnClickListener
+            // app oficial: seleccionar del primero hasta el capítulo marcado
+            viewModel.selectChapters(BitSet().apply { set(0, index + 1) })
+        }
+
+        binding.chapterSelectDown.setOnClickListener {
+            val selection = viewModel.selectedChapters.value ?: return@setOnClickListener
+            if (selection.cardinality() != 1) return@setOnClickListener
+            val index = selection.nextSetBit(0)
+            val size = viewModel.totalChapterCount()
+            if (index < 0 || index + 1 >= size) return@setOnClickListener
+            // app oficial: seleccionar del capítulo marcado hasta el final
+            viewModel.selectChapters(BitSet().apply { set(index, size) })
+        }
+
+        binding.chapterSelectUnread.setOnClickListener {
+            viewModel.markSelection(setToRead = false)
         }
 
         binding.chapterSelectRead.setOnClickListener {
-            viewModel.markSelectedChaptersAsRead()
-            showToast(getString(R.string.selected_chapters_marked_read))
+            viewModel.markSelection(setToRead = true)
         }
 
         binding.chapterSelectDownload.setOnClickListener {
-            if (viewModel.downloadSelectedChapters()) {
-                showToast(getString(R.string.selected_chapters_downloading))
-            }
+            viewModel.downloadSelection()
         }
 
-        binding.chaptersFab.setOnClickListener { _ ->
-            val act = activity ?: return@setOnClickListener
-            val bottomSheetDialog = BottomSheetDialog(act)
-            val binding = ChapterFilterPopupBinding.inflate(act.layoutInflater, null, false)
-            bottomSheetDialog.setContentView(binding.root)
-
-            val filterTab = binding.filterTabs.newTab().setText(getString(R.string.mainpage_filter))
-            val sortTab = binding.filterTabs.newTab()
-                .setText(getString(R.string.mainpage_sort_by_button_text))
-            binding.filterTabs.addTab(filterTab)
-            binding.filterTabs.addTab(sortTab)
-            binding.filterTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-                override fun onTabSelected(tab: TabLayout.Tab?) {
-                    val position = tab?.position
-                    binding.filterContent.isVisible = position == 0
-                    binding.sortContent.isVisible = position == 1
-                }
-
-                override fun onTabUnselected(tab: TabLayout.Tab?) = Unit
-                override fun onTabReselected(tab: TabLayout.Tab?) = Unit
-            })
-            binding.filterTabs.selectTab(filterTab)
-
-            binding.filterBookmarked.isChecked = ResultViewModel.filterChapterByBookmarked
-            binding.filterRead.isChecked = ResultViewModel.filterChapterByRead
-            binding.filterUnread.isChecked = ResultViewModel.filterChapterByUnread
-            binding.filterDownloaded.isChecked = ResultViewModel.filterChapterByDownloads
-
-            binding.filterBookmarked.setOnCheckedChangeListener { _, isChecked ->
-                ResultViewModel.filterChapterByBookmarked = isChecked
-                viewModel.reorderChapters()
+        // app oficial: con la selección abierta, "atrás" la cierra
+        chapterSelectionBackCallback = object : OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() {
+                viewModel.clearChapterSelection()
             }
-
-            binding.filterRead.setOnCheckedChangeListener { _, isChecked ->
-                ResultViewModel.filterChapterByRead = isChecked
-                viewModel.reorderChapters()
-            }
-
-            binding.filterUnread.setOnCheckedChangeListener { _, isChecked ->
-                ResultViewModel.filterChapterByUnread = isChecked
-                viewModel.reorderChapters()
-            }
-
-            binding.filterDownloaded.setOnCheckedChangeListener { _, isChecked ->
-                ResultViewModel.filterChapterByDownloads = isChecked
-                viewModel.reorderChapters()
-            }
-
-            val adapter =
-                SortingMethodAdapter(ResultViewModel.sortChapterBy) { item, position, newId ->
-                    binding.sortContent.adapter?.notifyItemRangeChanged(
-                        0,
-                        ResultViewModel.chapterSortingMethods.size
-                    )
-                    ResultViewModel.sortChapterBy = newId
-                    viewModel.reorderChapters()
-                }
-            adapter.submitList(ResultViewModel.chapterSortingMethods.toList())
-            binding.sortContent.adapter = adapter
-            bottomSheetDialog.show()
         }
+        requireActivity().onBackPressedDispatcher.addCallback(
+            viewLifecycleOwner,
+            chapterSelectionBackCallback!!
+        )
 
         observe(viewModel.downloadState) { progressState ->
             if (progressState == null) {
@@ -1169,13 +1234,21 @@ class ResultFragment : BaseFragment<FragmentResultBinding>(
             }
             //val hasDownload = progressState.progress > 0
 
-            // el chip "Descargado" depende de los archivos en disco: se invalida la caché y,
-            // al acabar la descarga, se reordena para que la lista muestre los nuevos capítulos
+            // los iconos por capítulo (spinner / cola / descargado) y el chip "Descargado"
+            // dependen del estado de la descarga
             viewModel.invalidateDownloadedChaptersCache()
             if (progressState.state == DownloadState.IsDone &&
-                ResultViewModel.chapterQuickFilter == ResultViewModel.CHAPTER_QUICK_FILTER_DOWNLOADED
+                viewModel.chapterFilterMethodType == ChapterFilterMethodType.Downloaded
             ) {
                 viewModel.reorderChapters()
+            }
+            if (viewModel.isSelectingChapters() || viewModel.currentTabIndex.value == 3) {
+                (binding.chapterList.adapter as? ChapterAdapter)?.notifyDataSetChanged()
+                if (viewModel.isSelectingChapters()) {
+                    viewModel.selectedChapters.value?.let { selection ->
+                        updateChapterSelectionUi(binding, selection)
+                    }
+                }
             }
 
             /*binding.downloadDeleteTrashFromResult.apply {

@@ -35,11 +35,6 @@ const val EPUB_TTS_CONTINUOUS_SCROLL: String = "reader_epub_tts_continuous_scrol
 // Multiplicador de velocidad del desplazamiento automático del TTS
 const val EPUB_TTS_SCROLL_SPEED: String = "reader_epub_tts_scroll_speed"
 const val RESULT_CHAPTER_SORT: String = "result_chapter_sort"
-const val RESULT_CHAPTER_FILTER_DOWNLOADED: String = "result_chapter_filter_download"
-const val RESULT_CHAPTER_FILTER_BOOKMARKED: String = "result_chapter_filter_bookmarked"
-const val RESULT_CHAPTER_FILTER_READ: String = "result_chapter_filter_read"
-const val RESULT_CHAPTER_FILTER_UNREAD: String = "result_chapter_filter_unread"
-const val RESULT_CHAPTER_QUICK_FILTER: String = "result_chapter_quick_filter"
 const val EPUB_TTS_SET_PITCH: String = "reader_epub_tts_pitch"
 const val EPUB_BG_COLOR: String = "reader_epub_bg_color"
 const val EPUB_TEXT_COLOR: String = "reader_epub_text_color"

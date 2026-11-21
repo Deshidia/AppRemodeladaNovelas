@@ -43,20 +43,12 @@
     <string name="poster_open_source_descript">Ver fuente original</string>
     <string name="back_to_search">Volver a buscar</string>
     <string name="no_chapters_found">No se encontraron capítulos</string>
-    <!-- Filtros rápidos y selección múltiple de la lista de capítulos (como la app oficial) -->
-    <string name="chapter_filter_all">Todos</string>
-    <string name="chapter_filter_downloaded">Descargado</string>
-    <string name="chapter_filter_read">Has leído</string>
-    <string name="chapter_count_formatted" formatted="true">%d Capítulos</string>
-    <string name="chapters_selected_formatted" formatted="true">%d Seleccionados</string>
-    <string name="chapter_select_close">Cerrar selección</string>
-    <string name="chapter_select_all">Seleccionar todo</string>
-    <string name="chapter_select_read">Marcar seleccionados como leídos</string>
-    <string name="chapter_select_download">Descargar seleccionados</string>
-    <string name="selected_chapters_downloading">Descargando capítulos seleccionados</string>
-    <string name="selected_chapters_marked_read">Capítulos marcados como leídos</string>
-    <string name="download_already_running">Ya hay una descarga en curso para esta novela</string>
-    <string name="no_chapters_selected">No hay capítulos seleccionados</string>
+    <!-- Lista de capítulos (app oficial): filtros rápidos, contador y selección múltiple -->
+    <string name="all">Todos</string>
+    <string name="not_downloaded">No descargado</string>
+    <string name="not_read">No leído</string>
+    <string name="selected_format" formatted="true">Seleccionados %d</string>
+    <string name="release_sort">Por orden de lanzamiento</string>
 
     <!-- Descargas y Gestión de Archivos -->
     <string name="downloads_text">Descargas</string>
@@ -124,7 +116,7 @@
     <!-- Interfaz del Lector -->
     <string name="read_action_settings">Ajustes</string>
     <string name="read_action_chapters">Capítulos</string>
-    <string name="read_action_chapters_formatted" formatted="true">%d Capítulos</string>
+    <string name="read_action_chapters_formatted" formatted="true">%s Capítulos</string>
     <string name="select_chapter">Seleccionar capítulo</string>
     <string name="search_chapters">Buscar capítulos…</string>
     <string name="reload_chapter">Recargar capítulo</string>

@@ -32,24 +32,14 @@ import com.lagradost.quicknovel.PreferenceDelegate
 import com.lagradost.quicknovel.R
 import com.lagradost.quicknovel.RESULT_BOOKMARK
 import com.lagradost.quicknovel.ui.LibraryListManager
-import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_BOOKMARKED
-import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_DOWNLOADED
-import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_READ
-import com.lagradost.quicknovel.RESULT_CHAPTER_FILTER_UNREAD
-import com.lagradost.quicknovel.RESULT_CHAPTER_QUICK_FILTER
+import com.lagradost.quicknovel.DOWNLOAD_OFFSET
 import com.lagradost.quicknovel.RESULT_CHAPTER_SORT
 import com.lagradost.quicknovel.StreamResponse
 import com.lagradost.quicknovel.UserReview
 import com.lagradost.quicknovel.mvvm.Resource
 import com.lagradost.quicknovel.mvvm.launchSafe
-import com.lagradost.quicknovel.ui.download.CHAPTER_SORT
 import com.lagradost.quicknovel.ui.download.DownloadFragment
-import com.lagradost.quicknovel.ui.download.LAST_ACCES_SORT
-import com.lagradost.quicknovel.ui.download.LAST_UPDATED_SORT
 import com.lagradost.quicknovel.ui.download.REVERSE_CHAPTER_SORT
-import com.lagradost.quicknovel.ui.download.REVERSE_LAST_ACCES_SORT
-import com.lagradost.quicknovel.ui.download.REVERSE_LAST_UPDATED_SORT
-import com.lagradost.quicknovel.ui.download.SortingMethod
 import com.lagradost.quicknovel.DownloadFileWorkManager
 import com.lagradost.quicknovel.util.Apis
 import com.lagradost.quicknovel.untranslatedName
@@ -67,48 +57,76 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.BitSet
+
+/** Orden de la lista de capítulos (app oficial). */
+enum class ChapterSortingMethodType(val id: Int) {
+    Default(0),
+    Ascending(1),
+    RevAscending(2),
+    Alphabetical(3),
+    RevAlphabetical(4);
+
+    companion object {
+        fun from(value: Int): ChapterSortingMethodType {
+            // valor antiguo de RESULT_CHAPTER_SORT (orden por capítulo invertido): se respeta
+            if (value == REVERSE_CHAPTER_SORT) return RevAscending
+            return entries.firstOrNull { it.id == value } ?: Default
+        }
+    }
+}
+
+/** Filtro único de la lista de capítulos (app oficial). */
+enum class ChapterFilterMethodType(val id: Int) {
+    All(0),
+    Downloaded(1),
+    UnDownloaded(2),
+    Read(3),
+    UnRead(4),
+    Bookmark(5),
+    UnBookmark(6);
+
+    companion object {
+        fun from(value: Int): ChapterFilterMethodType? {
+            return entries.firstOrNull { it.id == value }
+        }
+    }
+}
+
+/**
+ * UI
+ *
+ * Opciones de ordenación de la lista de capítulos (app oficial):
+ * si inverse == id es una opción única, si no se alterna entre ambas.
+ */
+data class ChapterMethodPair(
+    val name: Int,
+    val id: ChapterSortingMethodType,
+    val inverse: ChapterSortingMethodType = id
+)
+
+val chapterSortingMethods = listOf(
+    ChapterMethodPair(R.string.default_sort, ChapterSortingMethodType.Default),
+    ChapterMethodPair(
+        R.string.release_sort,
+        ChapterSortingMethodType.Ascending,
+        ChapterSortingMethodType.RevAscending
+    ),
+    ChapterMethodPair(
+        R.string.alpha_sort,
+        ChapterSortingMethodType.Alphabetical,
+        ChapterSortingMethodType.RevAlphabetical
+    ),
+)
 
 
 class ResultViewModel : ViewModel() {
     companion object {
-        val chapterSortingMethods = arrayOf(
-            SortingMethod(R.string.chapter_sort, CHAPTER_SORT, REVERSE_CHAPTER_SORT),
-            SortingMethod(R.string.recently_sort, LAST_ACCES_SORT, REVERSE_LAST_ACCES_SORT),
-        )
-        var sortChapterBy by PreferenceDelegate(RESULT_CHAPTER_SORT, CHAPTER_SORT, Int::class)
-
-        var filterChapterByDownloads by PreferenceDelegate(
-            RESULT_CHAPTER_FILTER_DOWNLOADED,
-            false,
-            Boolean::class
-        )
-        var filterChapterByBookmarked by PreferenceDelegate(
-            RESULT_CHAPTER_FILTER_BOOKMARKED,
-            false,
-            Boolean::class
-        )
-        var filterChapterByRead by PreferenceDelegate(
-            RESULT_CHAPTER_FILTER_READ,
-            true,
-            Boolean::class
-        )
-        var filterChapterByUnread by PreferenceDelegate(
-            RESULT_CHAPTER_FILTER_UNREAD,
-            true,
-            Boolean::class
-        )
-
-        // Filtros rápidos de la lista de capítulos (chips Todos/Descargado/Has leído, app oficial)
-        const val CHAPTER_QUICK_FILTER_ALL = 0
-        const val CHAPTER_QUICK_FILTER_DOWNLOADED = 1
-        const val CHAPTER_QUICK_FILTER_READ = 2
-
-        var chapterQuickFilter by PreferenceDelegate(
-            RESULT_CHAPTER_QUICK_FILTER,
-            CHAPTER_QUICK_FILTER_ALL,
+        var sortChapterBy by PreferenceDelegate(
+            RESULT_CHAPTER_SORT,
+            ChapterSortingMethodType.Default.id,
             Int::class
         )
-
     }
 
     var chapterQuery: String? = null
@@ -135,49 +153,40 @@ class ResultViewModel : ViewModel() {
 
 
     private fun orderChapters(list: List<ChapterData>): List<ChapterData> {
-        val filterRead = filterChapterByRead
-        val filterUnread = filterChapterByUnread
-        // val filterBookmarked = filterChapterByBookmarked
-        val filterDownloaded = filterChapterByDownloads
-        val sort = sortChapterBy
-        val state = downloadState.value
+        val sort = ChapterSortingMethodType.from(sortChapterBy)
+        val filter = chapterFilterMethodType
         val query = chapterQuery
-        val quickFilter = chapterQuickFilter
 
         return list.filter { chapter ->
             val read = hasReadChapter(chapter)
 
-            // chip rápido (Todos / Descargado / Has leído), como en la app oficial
-            val matchesQuickFilter = when (quickFilter) {
-                CHAPTER_QUICK_FILTER_DOWNLOADED -> isChapterDownloaded(chapter)
-                CHAPTER_QUICK_FILTER_READ -> read
-                else -> true
+            // filtro único de la app oficial (Todos / Descargado / No descargado / Has leído / No leído)
+            val matchesFilter = when (filter) {
+                ChapterFilterMethodType.All -> true
+                ChapterFilterMethodType.Downloaded -> isChapterDownloaded(chapter)
+                ChapterFilterMethodType.UnDownloaded -> !isChapterDownloaded(chapter)
+                ChapterFilterMethodType.Read -> read
+                ChapterFilterMethodType.UnRead -> !read
+                // los chips de la app oficial no exponen los marcadores
+                ChapterFilterMethodType.Bookmark, ChapterFilterMethodType.UnBookmark -> true
             }
 
-            matchesQuickFilter && ((filterUnread && !read) || (filterRead && read) ||
-                    (filterDownloaded && (state != null && state.progress > (chapterIndex(chapter)
-                        ?: Int.MAX_VALUE)))) && (query == null || chapter.name.contains(query, ignoreCase = true))
-        }.sortedBy { chapter ->
-            return@sortedBy when (sort) {
-                CHAPTER_SORT -> {
-                    chapterIndex(chapter)?.toLong()
-                }
+            matchesFilter && (query == null || chapter.name.contains(query, ignoreCase = true))
+        }.sortedWith(
+            when (sort) {
+                ChapterSortingMethodType.Default, ChapterSortingMethodType.Ascending ->
+                    compareBy { chapterIndex(it) ?: Int.MAX_VALUE }
 
-                REVERSE_CHAPTER_SORT -> {
-                    chapterIndex(chapter)?.toLong()?.unaryMinus()
-                }
+                ChapterSortingMethodType.RevAscending ->
+                    compareByDescending { chapterIndex(it) ?: Int.MIN_VALUE }
 
-                LAST_ACCES_SORT -> {
-                    getChapterReadTime(chapter) ?: Long.MAX_VALUE
-                }
+                ChapterSortingMethodType.Alphabetical ->
+                    compareBy { it.name }
 
-                REVERSE_LAST_ACCES_SORT -> {
-                    -(getChapterReadTime(chapter) ?: Long.MAX_VALUE)
-                }
-
-                else -> null
+                ChapterSortingMethodType.RevAlphabetical ->
+                    compareByDescending { it.name }
             }
-        }
+        )
     }
 
     fun clear() {
@@ -257,92 +266,150 @@ class ResultViewModel : ViewModel() {
         return index in downloadedChapterIndices()
     }
 
-    // ==== Selección múltiple de capítulos (app oficial) ====
+    // ==== Lista de capítulos (app oficial): filtro único, orden y selección múltiple ====
 
-    /** Modo selección activo (barra inferior "Selected N" visible). */
-    val chapterSelectionMode = MutableLiveData(false)
+    /** Filtro único activo (Todos / Descargado / No descargado / Has leído / No leído).
+     * Como en la app oficial, no se persiste: se reinicia al abrir la ficha. */
+    var chapterFilterMethodType: ChapterFilterMethodType = ChapterFilterMethodType.All
+        private set
 
-    /** Urls de los capítulos seleccionados. */
-    val selectedChapterUrls = MutableLiveData<Set<String>>(emptySet())
-
-    fun isSelectingChapters(): Boolean = chapterSelectionMode.value == true
-
-    fun isChapterSelected(chapter: ChapterData): Boolean =
-        selectedChapterUrls.value?.contains(chapter.url) == true
-
-    /** Entra en modo selección con [chapter] ya marcado (icono de descarga / pulsación larga). */
-    fun enterChapterSelectionMode(chapter: ChapterData) {
-        selectedChapterUrls.postValue(setOf(chapter.url))
-        chapterSelectionMode.postValue(true)
-    }
-
-    fun toggleChapterSelection(chapter: ChapterData) {
-        val current = selectedChapterUrls.value ?: emptySet()
-        selectedChapterUrls.postValue(
-            if (chapter.url in current) current - chapter.url else current + chapter.url
-        )
-    }
-
-    /** Selecciona o deselecciona todos los capítulos visibles con el filtro actual. */
-    fun toggleSelectAllChapters() {
-        val visible = chapters.value ?: emptyList()
-        val current = selectedChapterUrls.value ?: emptySet()
-        if (visible.isNotEmpty() && visible.all { it.url in current }) {
-            selectedChapterUrls.postValue(emptySet())
-        } else {
-            selectedChapterUrls.postValue(visible.map { it.url }.toSet())
-        }
-    }
-
-    fun exitChapterSelectionMode() {
-        chapterSelectionMode.postValue(false)
-        selectedChapterUrls.postValue(emptySet())
-    }
-
-    /** Botón de confirmación (✓) de la app oficial: marca los seleccionados como leídos. */
-    fun markSelectedChaptersAsRead() {
-        val selected = selectedChapterUrls.value ?: return
-        val streamResponse = (loadResponse.value as? Resource.Success)?.value as? StreamResponse
-            ?: return
-        for (chapter in streamResponse.data) {
-            if (chapter.url in selected) {
-                setReadChapter(chapter, true)
-            }
-        }
-        exitChapterSelectionMode()
-        isResume = true
+    fun setChapterFilterMethod(type: ChapterFilterMethodType) {
+        chapterFilterMethodType = type
         reorderChapters()
     }
 
-    /**
-     * Botón de descarga (⬇) de la app oficial: descarga solo los capítulos seleccionados.
-     * Devuelve false si no se ha podido empezar (sin selección o descarga ya en curso).
-     */
-    fun downloadSelectedChapters(): Boolean {
-        if (!hasLoaded) return false
-        val selected = selectedChapterUrls.value ?: return false
-        if (selected.isEmpty()) return false
-        val act = activity ?: return false
-        val streamResponse = load as? StreamResponse ?: return false
-        val api = repo ?: return false
+    /** Capítulos seleccionados por índice (BitSet, como la selección de la app oficial). */
+    val selectedChapters = MutableLiveData<BitSet>(BitSet())
 
-        when (downloadProgress[loadId]?.state) {
-            DownloadState.IsDownloading, DownloadState.IsPending -> {
-                showToast(R.string.download_already_running)
-                return false
+    /** Se incrementa al cambiar las marcas de lectura para repintar la lista. */
+    val chapterReadMarksChanged = MutableLiveData<Int>(0)
+
+    /** En la app oficial el modo selección equivale a tener capítulos seleccionados. */
+    fun isSelectingChapters(): Boolean = selectedChapters.value?.isEmpty == false
+
+    /** Índice original del capítulo dentro de la novela (null si aún no se ha cargado). */
+    fun chapterIndexOf(chapter: ChapterData): Int? = chapterIndex(chapter)
+
+    fun isChapterSelected(chapter: ChapterData): Boolean {
+        val index = chapterIndex(chapter) ?: return false
+        return selectedChapters.value?.get(index) == true
+    }
+
+    fun selectChapters(newSelection: BitSet) {
+        selectedChapters.postValue(newSelection)
+    }
+
+    fun clearChapterSelection() {
+        selectChapters(BitSet())
+    }
+
+    fun toggleChapterSelection(chapter: ChapterData) {
+        val index = chapterIndex(chapter) ?: return
+        val selection = selectedChapters.value ?: BitSet()
+        selectChapters(
+            // java.util.BitSet no tiene copy(): se clona con valueOf (app oficial: data class)
+            BitSet.valueOf(selection.toLongArray()).apply {
+                if (get(index)) clear(index) else set(index)
             }
+        )
+    }
 
-            else -> {}
+    /** Total de capítulos de la novela (para el contador "N/M" de la app oficial). */
+    fun totalChapterCount(): Int =
+        if (hasLoaded) (load as? StreamResponse)?.data?.size ?: 0 else 0
+
+    /** Estado de descarga actual de esta novela (iconos por capítulo de la app oficial). */
+    fun currentDownloadProgress(): DownloadProgressState? =
+        if (hasLoaded) downloadProgress[loadId] else null
+
+    /** Offset de la descarga parcial (índice del primer capítulo a descargar), null si no hay. */
+    fun downloadOffsetIndex(): Int? =
+        if (hasLoaded) getKey<Int>(DOWNLOAD_OFFSET, loadId.toString()) else null
+
+    private fun isChapterIndexRead(index: Int): Boolean {
+        val streamResponse = (load as? StreamResponse) ?: return false
+        return getKey<Long>(
+            EPUB_CURRENT_POSITION_READ_AT,
+            "${streamResponse.name}/$index"
+        ) != null
+    }
+
+    /** Cuántos de los seleccionados están leídos (botones done_all / remove_done). */
+    fun selectedReadCount(): Int {
+        val selection = selectedChapters.value ?: return 0
+        var count = 0
+        var i = selection.nextSetBit(0)
+        while (i >= 0) {
+            if (isChapterIndexRead(i)) count++
+            i = selection.nextSetBit(i + 1)
+        }
+        return count
+    }
+
+    /** true si algún capítulo seleccionado no está descargado (botón de descargar). */
+    fun selectionHasNotDownloaded(): Boolean {
+        val selection = selectedChapters.value ?: return false
+        if (!hasLoaded) return false
+        val downloaded = downloadedChapterIndices()
+        var i = selection.nextSetBit(0)
+        while (i >= 0) {
+            if (i !in downloaded) return true
+            i = selection.nextSetBit(i + 1)
+        }
+        return false
+    }
+
+    /** Botones done_all/remove_done de la app oficial: marca la selección leída o no leída.
+     * La selección se mantiene, como en la app oficial. */
+    fun markSelection(setToRead: Boolean) {
+        val selection = selectedChapters.value ?: return
+        if (selection.isEmpty) return
+        val streamResponse =
+            (loadResponse.value as? Resource.Success)?.value as? StreamResponse ?: return
+
+        var i = selection.nextSetBit(0)
+        while (i >= 0) {
+            streamResponse.data.getOrNull(i)?.let { chapter ->
+                setReadChapter(chapter, setToRead)
+            }
+            i = selection.nextSetBit(i + 1)
         }
 
-        val indices = streamResponse.data.mapIndexedNotNull { index, chapter ->
-            if (chapter.url in selected) index else null
+        isResume = true
+        reorderChapters()
+        // repinta la lista (checks de leído) y la barra (los contadores cambian)
+        chapterReadMarksChanged.postValue((chapterReadMarksChanged.value ?: 0) + 1)
+        selectedChapters.postValue(BitSet.valueOf(selection.toLongArray()))
+    }
+
+    /** Botón de descarga de la barra de selección (app oficial): descarga los seleccionados. */
+    fun downloadSelection() {
+        if (!hasLoaded) return
+        val selection = selectedChapters.value ?: return
+        if (selection.isEmpty) return
+        val act = activity ?: return
+        val streamResponse = load as? StreamResponse ?: return
+
+        val indices = mutableListOf<Int>()
+        var i = selection.nextSetBit(0)
+        while (i >= 0) {
+            if (i in streamResponse.data.indices) indices.add(i)
+            i = selection.nextSetBit(i + 1)
         }
-        if (indices.isEmpty()) return false
+        if (indices.isEmpty()) return
 
         DownloadFileWorkManager.downloadChapters(streamResponse, act, indices)
-        exitChapterSelectionMode()
-        return true
+    }
+
+    /** Icono de descarga de una fila (app oficial): descarga solo ese capítulo. */
+    fun downloadChapter(chapter: ChapterData) {
+        if (!hasLoaded) return
+        val act = activity ?: return
+        val streamResponse = load as? StreamResponse ?: return
+        val index = chapterIndex(chapter) ?: return
+        if (index !in streamResponse.data.indices) return
+
+        DownloadFileWorkManager.downloadChapters(streamResponse, act, listOf(index))
     }
 
     var repo: APIRepository? = null
