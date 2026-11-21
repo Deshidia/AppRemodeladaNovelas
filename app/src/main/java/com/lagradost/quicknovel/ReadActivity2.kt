@@ -1,6 +1,7 @@
 package com.lagradost.quicknovel
 
 import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -13,12 +14,14 @@ import android.graphics.Color
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.speech.tts.Voice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -499,6 +502,132 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
     var lockBottom: Int? = null
     var currentScroll: Int = 0
 
+    // ---- Desplazamiento automático suave siguiendo la lectura del TTS ----
+
+    /** Animación en curso que lleva la vista hasta la frase que se está leyendo. */
+    private var ttsScrollAnimator: ValueAnimator? = null
+
+    /** Marca el scroll hecho por el propio TTS (modo continuo) para que el OnScrollListener
+     *  no lo recorte contra el área bloqueada. */
+    private var ttsProgrammaticScroll = false
+
+    /** Último desplazamiento real aplicado por un scroll programático del TTS. */
+    private var ttsProgrammaticLastDy = 0
+
+    /** Bucle de fotogramas del scroll continuo ("modo cine") mientras el TTS lee. */
+    private var ttsContinuousScrollRunning = false
+    private var ttsLastContinuousFrame = 0L
+
+    private val isTtsSmoothScrolling: Boolean
+        get() = ttsScrollAnimator?.isRunning == true
+
+    /** Y al que queda anclada la frase que se está leyendo: un tercio del área de lectura. */
+    private fun ttsAnchorY(): Int {
+        val topY = getTopY()
+        val bottomY = getBottomY()
+        return topY + (bottomY - topY) / 3
+    }
+
+    private fun cancelTtsScrollAnimation() {
+        ttsScrollAnimator?.cancel()
+        ttsScrollAnimator = null
+    }
+
+    /**
+     * Anima el scroll de [binding.realText] hasta haber recorrido [delta] px
+     * (positivo = hacia abajo), de forma suave. La duración depende de la distancia
+     * y del multiplicador de velocidad configurado en la pestaña de voz.
+     */
+    private fun smoothScrollTTS(delta: Int) {
+        if (delta == 0) return
+        cancelTtsScrollAnimation()
+
+        val speed = viewModel.ttsScrollSpeed.coerceIn(0.25f, 3.0f)
+        val duration = ((delta.absoluteValue * 1.2f).coerceIn(140f, 800f) / speed)
+            .coerceAtLeast(50f)
+            .toLong()
+
+        val from = currentScroll
+        val animator = ValueAnimator.ofInt(from, from + delta)
+        animator.duration = duration
+        animator.interpolator = DecelerateInterpolator()
+        animator.addUpdateListener { anim ->
+            val dy = (anim.animatedValue as Int) - currentScroll
+            if (dy != 0) {
+                binding.realText.scrollBy(0, dy)
+            }
+        }
+        animator.doOnEnd {
+            if (ttsScrollAnimator === animator) {
+                ttsScrollAnimator = null
+            }
+        }
+        ttsScrollAnimator = animator
+        animator.start()
+    }
+
+    /** Arranca el bucle del scroll continuo si no está ya corriendo. */
+    private fun startTTSContinuousScroll() {
+        if (ttsContinuousScrollRunning) return
+        ttsContinuousScrollRunning = true
+        ttsLastContinuousFrame = 0L
+        binding.realText.postOnAnimation(::ttsContinuousScrollTick)
+    }
+
+    private fun stopTTSContinuousScroll() {
+        ttsContinuousScrollRunning = false
+        ttsLastContinuousFrame = 0L
+    }
+
+    /**
+     * Scroll continuo ("modo cine"): mientras el TTS lee y nadie toca la pantalla, la vista
+     * se desliza lentamente hacia abajo. La velocidad base es proporcional a la altura de la
+     * pantalla y la regulan la velocidad de la voz y el slider de desplazamiento.
+     */
+    private fun ttsContinuousScrollTick() {
+        if (!ttsContinuousScrollRunning) return
+        val rv = binding.realText
+
+        // se detiene del todo si el TTS ya no lee o el modo continuo se apagó
+        val ttsActive = viewModel.isTTSRunning() && viewModel.ttsContinuousScroll
+        if (!ttsActive) {
+            ttsContinuousScrollRunning = false
+            return
+        }
+
+        // mientras tanto se pausa solo: usuario arrastrando, animación de acompañamiento
+        // en curso, o la app en segundo plano. El bucle sigue vivo para reanudarse solo.
+        val canMove = rv.scrollState == RecyclerView.SCROLL_STATE_IDLE &&
+                !isTtsSmoothScrolling &&
+                rv.isAttachedToWindow &&
+                rv.windowVisibility == View.VISIBLE
+        if (!canMove) {
+            ttsLastContinuousFrame = 0L
+            rv.postOnAnimation(::ttsContinuousScrollTick)
+            return
+        }
+
+        val now = SystemClock.elapsedRealtime()
+        val last = ttsLastContinuousFrame
+        ttsLastContinuousFrame = now
+        val dt = if (last == 0L) 0L else (now - last).coerceAtMost(100L)
+
+        val pxPerSecond = rv.height * 0.015f * viewModel.ttsSpeed * viewModel.ttsScrollSpeed
+        val step = (pxPerSecond * dt / 1000f).roundToInt()
+
+        if (step > 0 && rv.canScrollVertically(1)) {
+            ttsProgrammaticLastDy = 0
+            ttsProgrammaticScroll = true
+            rv.scrollBy(0, step)
+            ttsProgrammaticScroll = false
+            // el área bloqueada del TTS se desplaza junto con la vista
+            lockTop = lockTop?.plus(ttsProgrammaticLastDy)
+            lockBottom = lockBottom?.plus(ttsProgrammaticLastDy)
+        }
+
+        rv.postOnAnimation(::ttsContinuousScrollTick)
+    }
+
     private fun updateTTSLine(line: TTSHelper.TTSLine?, depth: Int = 0) {
         // update the visual component
         /*println("LINE: ${line?.speakOutMsg} =>")
@@ -516,10 +645,11 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
             viewHolder.updateTTSLine(line)
         }*/
 
-        // update the lock area
-        if (line == null || !viewModel.ttsLock) {
+        if (line == null) {
             lockTop = null
             lockBottom = null
+            cancelTtsScrollAnimation()
+            stopTTSContinuousScroll()
             return
         }
 
@@ -564,21 +694,56 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         }
 
         val topScroll = top.top - getTopY()
-        lockTop = currentScroll + topScroll
         val bottomScroll =
             bottom.bottom - getBottomY()
-        lockBottom = currentScroll + bottomScroll
 
-        // binding.tmpTtsStart.fixLine(top.top)
-        //binding.tmpTtsEnd.fixLine(bottom.bottom)
-
-        // we have reached the end, scroll to the top
-        if (bottomScroll > 0) {
-            binding.realText.scrollBy(0, topScroll)
+        // update the lock area
+        if (viewModel.ttsLock) {
+            lockTop = currentScroll + topScroll
+            lockBottom = currentScroll + bottomScroll
+        } else {
+            lockTop = null
+            lockBottom = null
         }
-        // we have scrolled up while being on top
-        else if (topScroll < 0) {
-            binding.realText.scrollBy(0, topScroll)
+
+        // por si el bucle del scroll continuo se detuvo por el camino (pausa, cambio de
+        // capítulo…): es idempotente, si ya está corriendo no hace nada
+        if (viewModel.ttsContinuousScroll && viewModel.isTTSRunning()) {
+            startTTSContinuousScroll()
+        }
+
+        // mover la vista para seguir la lectura
+        if (viewModel.ttsContinuousScroll) {
+            // con el scroll continuo la vista ya avanza sola: solo se rescata la frase
+            // cuando ha desaparecido por completo de la pantalla
+            val outOfSight = top.bottom < getTopY() || top.top > getBottomY()
+            if (outOfSight) {
+                if (viewModel.ttsSmoothScroll) {
+                    smoothScrollTTS(top.top - ttsAnchorY())
+                } else {
+                    binding.realText.scrollBy(0, topScroll)
+                }
+            }
+        } else if (viewModel.ttsSmoothScroll) {
+            // acompañar: la frase leída queda anclada a un tercio desde arriba, animado
+            val anchorDelta = top.top - ttsAnchorY()
+            if (anchorDelta.absoluteValue > 2) {
+                smoothScrollTTS(anchorDelta)
+            }
+        } else if (viewModel.ttsLock) {
+            // comportamiento original: salto instantáneo solo cuando la frase sale del área
+
+            // binding.tmpTtsStart.fixLine(top.top)
+            //binding.tmpTtsEnd.fixLine(bottom.bottom)
+
+            // we have reached the end, scroll to the top
+            if (bottomScroll > 0) {
+                binding.realText.scrollBy(0, topScroll)
+            }
+            // we have scrolled up while being on top
+            else if (topScroll < 0) {
+                binding.realText.scrollBy(0, topScroll)
+            }
         }
     }
 
@@ -636,6 +801,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
 
     override fun onResume() {
         viewModel.resumedApp()
+        // al volver a la app, si el TTS sigue leyendo se reanuda el scroll continuo
+        if (viewModel.isTTSRunning() && viewModel.ttsContinuousScroll) {
+            startTTSContinuousScroll()
+        }
         super.onResume()
     }
 
@@ -742,6 +911,8 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
         // si se sale del lector con el TTS activo, la frase actual queda subrayada (progreso)
         viewModel.saveTTSProgressAsUserMark()
         viewModel.stopTTS()
+        cancelTtsScrollAnimation()
+        stopTTSContinuousScroll()
         this.unregisterReceiver(mBatInfoReceiver)
         if (readActivity === this) {
             readActivity = null
@@ -1095,6 +1266,13 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 binding.readToolbar.menu.clear()
             }*/
 
+            // el scroll continuo solo avanza mientras la voz está leyendo de verdad
+            if (status == TTSHelper.TTSStatus.IsRunning && viewModel.ttsContinuousScroll) {
+                startTTSContinuousScroll()
+            } else {
+                stopTTSContinuousScroll()
+            }
+
             binding.readerBottomView.isGone = isTTSRunning
             binding.readerBottomViewTts.isVisible = isTTSRunning
             binding.ttsActionPausePlay.setImageResource(
@@ -1257,43 +1435,50 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 var updateFromCode = false
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     if (dy != 0 && !updateFromCode) {
-                        var rdy = dy
+                        if (ttsProgrammaticScroll) {
+                            // scroll hecho por el propio TTS (modo continuo): pasa sin
+                            // recortarse contra el área bloqueada, ya se desplaza con la vista
+                            currentScroll += dy
+                            ttsProgrammaticLastDy = dy
+                        } else {
+                            var rdy = dy
 
-                        lockTop?.let { lock ->
-                            if (currentScroll + rdy > lock) {
-                                rdy = lock - currentScroll
-                                fling(0, 0)
+                            lockTop?.let { lock ->
+                                if (currentScroll + rdy > lock) {
+                                    rdy = lock - currentScroll
+                                    fling(0, 0)
+                                }
                             }
-                        }
 
-                        lockBottom?.let { lock ->
-                            if (currentScroll + rdy < lock) {
-                                rdy = lock - currentScroll
-                                fling(0, 0)
+                            lockBottom?.let { lock ->
+                                if (currentScroll + rdy < lock) {
+                                    rdy = lock - currentScroll
+                                    fling(0, 0)
+                                }
                             }
-                        }
 
-                        if (currentOverScroll < 0.0f && rdy < 0) {
-                            rdy = 0
-                        } else if (currentOverScroll > 0.0f && rdy > 0) {
-                            rdy = 0
-                        }
-                        /*println("currentOverScrollTranslation=$currentOverScrollTranslation rdy=$rdy")
-                        val dscroll = minOf(currentOverScrollTranslation.absoluteValue.toInt(), rdy.absoluteValue)
-                        if(currentOverScrollTranslation < 0 && rdy < 0) {
-                            currentOverScrollTranslation += dscroll
-                            rdy += dscroll
-                        }
-                        if(currentOverScrollTranslation > 0 && rdy > 0) {
-                            currentOverScrollTranslation -= dscroll
-                            rdy -= dscroll
-                        }*/
+                            if (currentOverScroll < 0.0f && rdy < 0) {
+                                rdy = 0
+                            } else if (currentOverScroll > 0.0f && rdy > 0) {
+                                rdy = 0
+                            }
+                            /*println("currentOverScrollTranslation=$currentOverScrollTranslation rdy=$rdy")
+                            val dscroll = minOf(currentOverScrollTranslation.absoluteValue.toInt(), rdy.absoluteValue)
+                            if(currentOverScrollTranslation < 0 && rdy < 0) {
+                                currentOverScrollTranslation += dscroll
+                                rdy += dscroll
+                            }
+                            if(currentOverScrollTranslation > 0 && rdy > 0) {
+                                currentOverScrollTranslation -= dscroll
+                                rdy -= dscroll
+                            }*/
 
-                        currentScroll += dy
-                        val delta = rdy - dy
-                        if (delta != 0 && canScrollVertically(delta)) {
-                            //updateFromCode = true
-                            scrollBy(0, delta)
+                            currentScroll += dy
+                            val delta = rdy - dy
+                            if (delta != 0 && canScrollVertically(delta)) {
+                                //updateFromCode = true
+                                scrollBy(0, delta)
+                            }
                         }
                     } else {
                         updateFromCode = false
@@ -1310,6 +1495,10 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                 //this is to reduce onScroll calls
                 override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                     super.onScrollStateChanged(recyclerView, newState)
+                    if(newState == RecyclerView.SCROLL_STATE_DRAGGING){
+                        // el usuario toma el control: se cancela la animación de acompañamiento
+                        cancelTtsScrollAnimation()
+                    }
                     if(newState == RecyclerView.SCROLL_STATE_SETTLING || newState == RecyclerView.SCROLL_STATE_IDLE){
                         onScroll()
                     }
@@ -1485,6 +1674,50 @@ class ReadActivity2 : AppCompatActivity(), ColorPickerDialogListener {
                     viewModel.ttsSpeed = value
                 }
             }
+
+            // Desplazamiento automático suave siguiendo la voz
+            bindingSettings.readSettingsTtsSmoothScroll.isChecked = viewModel.ttsSmoothScroll
+            bindingSettings.readSettingsTtsSmoothScroll.setOnCheckedChangeListener { _, isChecked ->
+                viewModel.ttsSmoothScroll = isChecked
+            }
+
+            // Scroll continuo ("modo cine") mientras el TTS lee
+            bindingSettings.readSettingsTtsContinuousScroll.isChecked = viewModel.ttsContinuousScroll
+            bindingSettings.readSettingsTtsContinuousScroll.setOnCheckedChangeListener { _, isChecked ->
+                viewModel.ttsContinuousScroll = isChecked
+                if (isChecked && viewModel.isTTSRunning()) {
+                    startTTSContinuousScroll()
+                } else if (!isChecked) {
+                    stopTTSContinuousScroll()
+                }
+            }
+
+            fun updateTtsScrollSpeedText(value: Float) {
+                bindingSettings.readSettingsTtsScrollSpeedText.text =
+                    getString(R.string.tts_scroll_speed_format, value)
+            }
+
+            bindingSettings.readSettingsTtsScrollSpeedText.setOnClickListener {
+                it.popupMenu(
+                    items = listOf(1 to R.string.reset_value),
+                    selectedItemId = null
+                ) {
+                    if (itemId == 1) {
+                        viewModel.ttsScrollSpeed = 1.0f
+                        bindingSettings.readSettingsTtsScrollSpeed.setValueRounded(viewModel.ttsScrollSpeed)
+                        updateTtsScrollSpeedText(viewModel.ttsScrollSpeed)
+                    }
+                }
+            }
+
+            bindingSettings.readSettingsTtsScrollSpeed.apply {
+                setValueRounded(viewModel.ttsScrollSpeed)
+                addOnChangeListener { slider, value, fromUser ->
+                    viewModel.ttsScrollSpeed = value
+                    updateTtsScrollSpeedText(value)
+                }
+            }
+            updateTtsScrollSpeedText(viewModel.ttsScrollSpeed)
 
             bindingSettings.readSettingsTextPaddingText.setOnClickListener {
                 it.popupMenu(

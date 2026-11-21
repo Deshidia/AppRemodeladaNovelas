@@ -2586,6 +2586,17 @@ class ReadActivityViewModel : ViewModel() {
     var ttsLock by PreferenceDelegate(EPUB_TTS_LOCK, true, Boolean::class)
     //var ttsOSSpeed by PreferenceDelegate(EPUB_TTS_OS_SPEED, true, Boolean::class)
 
+    // Desplazamiento automático suave: cada frase que lee el TTS se lleva a su sitio con una
+    // animación en lugar de saltar de golpe.
+    var ttsSmoothScroll by PreferenceDelegate(EPUB_TTS_SMOOTH_SCROLL, true, Boolean::class)
+
+    // Scroll continuo ("modo cine"): la vista se desliza lentamente mientras el TTS lee,
+    // con independencia de las frases.
+    var ttsContinuousScroll by PreferenceDelegate(EPUB_TTS_CONTINUOUS_SCROLL, false, Boolean::class)
+
+    // Multiplicador de velocidad del desplazamiento automático (0.25x - 3.0x).
+    var ttsScrollSpeed by PreferenceDelegate(EPUB_TTS_SCROLL_SPEED, 1.0f, Float::class)
+
     private var ttsSpeedKey by PreferenceDelegate(EPUB_TTS_SET_SPEED, 1.0f, Float::class)
     private var ttsPitchKey by PreferenceDelegate(EPUB_TTS_SET_PITCH, 1.0f, Float::class)
 

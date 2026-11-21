@@ -321,6 +321,9 @@
     <string name="start_chapter">Skipped chapters</string>
     <string name="tts_speed">TTS Speed</string>
     <string name="tts_pitch">TTS Pitch</string>
+    <string name="tts_smooth_scroll">Smooth scrolling that follows the voice</string>
+    <string name="tts_scroll_speed_format">Scroll speed: %1$.2fx</string>
+    <string name="tts_continuous_scroll">Continuous scroll while reading aloud</string>
     <string name="show_logcat_key" translatable="false">show_logcat_key</string>
     <string name="close">Close</string>
     <string name="clear">Clear</string>

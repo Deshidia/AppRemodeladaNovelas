@@ -186,6 +186,9 @@
     <string name="start_chapter">Capitulos salteados</string>
     <string name="tts_speed">Velocidad de voz</string>
     <string name="tts_pitch">Tono de voz</string>
+    <string name="tts_smooth_scroll">Desplazamiento suave siguiendo la voz</string>
+    <string name="tts_scroll_speed_format">Velocidad del desplazamiento: %1$.2fx</string>
+    <string name="tts_continuous_scroll">Scroll continuo mientras lee en voz alta</string>
     <string name="lock_tts">Bloquear área de lectura TTS</string>
     <string name="text_to_speech_channel_description">Notificación del lector de voz</string>
     <string name="sleep_timer">Temporizador</string>
